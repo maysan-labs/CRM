@@ -132,7 +132,7 @@ describe('AgentAsyncExecutorService — workflow agent role-scoped tool resoluti
     service = module.get<AgentAsyncExecutorService>(AgentAsyncExecutorService);
   });
 
-  it('passes unionOf: [agentRoleId] when the agent has a role assigned', async () => {
+  it('passes intersectionOf: [agentRoleId] when the agent has a role assigned', async () => {
     roleTargetRepository.findOne.mockResolvedValueOnce({ roleId: agentRoleId });
 
     await service.executeAgent({
@@ -145,7 +145,7 @@ describe('AgentAsyncExecutorService — workflow agent role-scoped tool resoluti
     expect(toolRegistry.getToolsByCategories).toHaveBeenCalledWith(
       expect.objectContaining({
         roleId: agentRoleId,
-        rolePermissionConfig: { unionOf: [agentRoleId] },
+        rolePermissionConfig: { intersectionOf: [agentRoleId] },
         workspaceId,
       }),
       expect.objectContaining({ wrapWithErrorContext: false }),
@@ -198,6 +198,47 @@ describe('AgentAsyncExecutorService — workflow agent role-scoped tool resoluti
       expect(result.totalCostInDollars).toBeCloseTo(0.0042, 6);
       // credits = dollars * 1_000_000
       expect(result.creditsUsedMicro).toBe(4200);
+    });
+
+    it('emits the token total without re-adding cache-creation tokens', async () => {
+      roleTargetRepository.findOne.mockResolvedValueOnce({
+        roleId: agentRoleId,
+      });
+      aiBillingService.calculateCost.mockReturnValue(0.0042);
+      generateTextMock.mockResolvedValueOnce({
+        text: '',
+        steps: [
+          {
+            toolCalls: [],
+            providerMetadata: {
+              anthropic: { cacheCreationInputTokens: 30 },
+            },
+          },
+        ],
+        usage: {
+          ...baseUsage,
+          // inputTokens (100) is the full prompt: noCache(60) + cacheRead(10) +
+          // cacheCreation(30) — the emitted total must not add the 30 again
+          inputTokenDetails: {
+            noCacheTokens: 60,
+            cacheReadTokens: 10,
+            cacheWriteTokens: 30,
+          },
+        },
+      } as unknown as Awaited<ReturnType<typeof generateText>>);
+
+      await service.executeAgent({
+        agent: buildAgent(),
+        userPrompt: 'test',
+        workspaceId,
+      });
+
+      expect(aiBillingService.emitAiTokenUsageEvent).toHaveBeenCalledTimes(1);
+
+      const [, , emittedTotalTokens] =
+        aiBillingService.emitAiTokenUsageEvent.mock.calls[0];
+
+      expect(emittedTotalTokens).toBe(150);
     });
 
     it('folds native web search dollars into totalCostInDollars and creditsUsedMicro', async () => {

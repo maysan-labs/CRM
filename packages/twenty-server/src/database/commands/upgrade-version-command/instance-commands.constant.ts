@@ -116,9 +116,18 @@ import { BackfillWorkspaceDatabaseSchemaSlowInstanceCommand } from './2-21/2-21-
 import { AddCreatedWorkspaceActivationStatusSlowInstanceCommand } from './2-22/2-22-instance-command-slow-1784106205000-add-created-workspace-activation-status';
 import { AddKanbanAndCalendarWidgetViewTypesFastInstanceCommand } from './2-23/2-23-instance-command-fast-1784620626405-add-kanban-and-calendar-widget-view-types';
 import { WidenViewCalendarIntegrityConstraintFastInstanceCommand } from './2-23/2-23-instance-command-fast-1784620626406-widen-view-calendar-integrity-constraint';
+import { AddApplicationIdToKeyValuePairFastInstanceCommand } from './2-23/2-23-instance-command-fast-1784659343818-add-application-id-to-key-value-pair';
+import { AddLogoFileIdToApplicationRegistration2_23FastInstanceCommand } from './2-23/2-23-instance-command-fast-1784823473532-add-logo-file-id-to-application-registration';
+import { AddMessageChannelDisplayNameFastInstanceCommand } from './2-25/2-25-instance-command-fast-1784904030252-add-message-channel-display-name';
 import { BackfillCreatedWorkspaceActivationStatusSlowInstanceCommand } from './2-23/2-23-instance-command-slow-1784286705000-backfill-created-workspace-activation-status';
 import { UnlistUnclaimedNpmApplicationRegistrationsSlowInstanceCommand } from './2-23/2-23-instance-command-slow-1784322591746-unlist-unclaimed-npm-application-registrations';
 import { AddStatusesToBillingSubscriptionIndexSlowInstanceCommand } from './2-23/2-23-instance-command-slow-1784650048045-add-statuses-to-billing-subscription-index';
+import { AddOnConnectLogicFunctionToConnectionProviderFastInstanceCommand } from './2-24/2-24-instance-command-fast-1784712843602-add-on-connect-logic-function-to-connection-provider';
+import { RepairKeyValuePairApplicationIdFastInstanceCommand } from './2-24/2-24-instance-command-fast-1784897347051-repair-key-value-pair-application-id';
+import { AddAgentForeignKeyToRoleTargetFastInstanceCommand } from './2-25/2-25-instance-command-fast-1784820332810-add-agent-foreign-key-to-role-target';
+import { AddAppTokenSsoExchangeIndexFastInstanceCommand } from './2-25/2-25-instance-command-fast-1785143586000-add-app-token-sso-exchange-index';
+import { AddPageLayoutCascadeDeleteIndexesFastInstanceCommand } from './2-25/2-25-instance-command-fast-1784904030251-add-page-layout-cascade-delete-indexes';
+import { AddChannelWebhookSubscriptionExternalIdIndexesFastInstanceCommand } from 'src/database/commands/upgrade-version-command/2-25/2-25-instance-command-fast-1785173910915-add-channel-webhook-subscription-external-id-indexes';
 
 export const INSTANCE_COMMANDS = [
   AddViewFieldGroupIdIndexOnViewFieldFastInstanceCommand,
@@ -238,6 +247,15 @@ export const INSTANCE_COMMANDS = [
   AddKanbanAndCalendarWidgetViewTypesFastInstanceCommand,
   WidenViewCalendarIntegrityConstraintFastInstanceCommand,
   AddAutoUpgradeToApplicationFastInstanceCommand,
+  AddApplicationIdToKeyValuePairFastInstanceCommand,
   AddSdkClientCoreChecksumToApplicationFastInstanceCommand,
+  AddLogoFileIdToApplicationRegistration2_23FastInstanceCommand,
+  AddMessageChannelDisplayNameFastInstanceCommand,
   AddStatusesToBillingSubscriptionIndexSlowInstanceCommand,
+  AddOnConnectLogicFunctionToConnectionProviderFastInstanceCommand,
+  RepairKeyValuePairApplicationIdFastInstanceCommand,
+  AddAgentForeignKeyToRoleTargetFastInstanceCommand,
+  AddAppTokenSsoExchangeIndexFastInstanceCommand,
+  AddPageLayoutCascadeDeleteIndexesFastInstanceCommand,
+  AddChannelWebhookSubscriptionExternalIdIndexesFastInstanceCommand,
 ];
