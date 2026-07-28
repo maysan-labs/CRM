@@ -5,11 +5,13 @@ import { useLingui } from '@lingui/react/macro';
 import React from 'react';
 import { FieldMetadataSettingsOnClickAction } from 'twenty-shared/types';
 import { useCopyToClipboard } from '~/hooks/useCopyToClipboard';
+import { useTelephony } from '@/telephony/hooks/useTelephony';
 
 export const PhonesFieldDisplay = () => {
   const { fieldValue, fieldDefinition } = usePhonesFieldDisplay();
   const { copyToClipboard } = useCopyToClipboard();
   const { isFocused } = useFieldFocus();
+  const { openDialer } = useTelephony();
 
   const { t } = useLingui();
 
@@ -19,9 +21,12 @@ export const PhonesFieldDisplay = () => {
     phoneNumber: string,
     event: React.MouseEvent<HTMLElement>,
   ) => {
+    event.preventDefault();
+    event.stopPropagation();
     if (onClickAction === FieldMetadataSettingsOnClickAction.COPY) {
-      event.preventDefault();
       copyToClipboard(phoneNumber, t`Phone number copied to clipboard`);
+    } else {
+      openDialer(phoneNumber);
     }
   };
 

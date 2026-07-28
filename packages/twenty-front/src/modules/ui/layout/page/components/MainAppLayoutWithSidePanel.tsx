@@ -2,6 +2,7 @@ import { CommandMenuForMobile } from '@/command-menu/components/CommandMenuForMo
 import { useCommandMenuHotKeys } from '@/command-menu/hooks/useCommandMenuHotKeys';
 import { SidePanelForDesktop } from '@/side-panel/components/SidePanelForDesktop';
 import { useIsMobile } from '@/ui/utilities/responsive/hooks/useIsMobile';
+import { TwilioSoftphoneDrawer } from '@/telephony/components/TwilioSoftphoneDrawer';
 import { styled } from '@linaria/react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { useEffect, useState } from 'react';
@@ -137,6 +138,8 @@ export const MainAppLayoutWithSidePanel = () => {
         <MainAppLayoutOutlet />
       </StyledContent>
       {isMobile ? <CommandMenuForMobile /> : <SidePanelForDesktop />}
+      <TwilioSoftphoneDrawer />
     </StyledRow>
   );
 };
+

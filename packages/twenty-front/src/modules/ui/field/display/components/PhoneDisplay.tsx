@@ -1,20 +1,41 @@
 import { parsePhoneNumber, type PhoneNumber } from 'libphonenumber-js';
 import { type MouseEvent } from 'react';
 import { isDefined } from 'twenty-shared/utils';
-import { ContactLink } from 'twenty-ui/navigation';
+import { styled } from '@linaria/react';
+import { useTelephony } from '@/telephony/hooks/useTelephony';
 
 interface PhoneDisplayProps {
   value: PhoneDisplayValueProps;
 }
+
 type PhoneDisplayValueProps = {
   number: string | null | undefined;
   callingCode: string | null | undefined;
 };
 
+const StyledPhoneButton = styled.button`
+  background: transparent;
+  border: none;
+  color: #3b82f6;
+  cursor: pointer;
+  font-size: 13px;
+  padding: 0;
+  text-decoration: underline;
+  text-decoration-color: transparent;
+  transition: all 0.15s ease-in-out;
+
+  &:hover {
+    color: #60a5fa;
+    text-decoration-color: #60a5fa;
+  }
+`;
+
 export const PhoneDisplay = ({
   value: { number, callingCode },
 }: PhoneDisplayProps) => {
-  if (!isDefined(number)) return <ContactLink href="#">{number}</ContactLink>;
+  const { dial } = useTelephony();
+
+  if (!isDefined(number)) return null;
 
   const callingCodeSanitized = callingCode?.replace('+', '');
 
@@ -25,23 +46,26 @@ export const PhoneDisplay = ({
       defaultCallingCode: callingCodeSanitized || '1',
     });
   } catch (error) {
-    if (!(error instanceof Error))
-      return <ContactLink href="#">{number}</ContactLink>;
-    if (error.message === 'NOT_A_NUMBER')
-      return <ContactLink href="#">{`+${callingCodeSanitized}`}</ContactLink>;
-    return <ContactLink href="#">{number}</ContactLink>;
+    if (!(error instanceof Error)) return null;
   }
 
-  const URI = parsedPhoneNumber.getURI();
-  const formatedPhoneNumber = parsedPhoneNumber.formatInternational();
+  const formattedPhoneNumber = parsedPhoneNumber
+    ? parsedPhoneNumber.formatInternational()
+    : number;
+
+  const handleDialClick = (event: MouseEvent<HTMLElement>) => {
+    event.stopPropagation();
+    event.preventDefault();
+
+    const targetNumber = parsedPhoneNumber ? parsedPhoneNumber.number : number;
+    if (targetNumber) {
+      dial(targetNumber);
+    }
+  };
+
   return (
-    <ContactLink
-      href={URI}
-      onClick={(event: MouseEvent<HTMLElement>) => {
-        event.stopPropagation();
-      }}
-    >
-      {formatedPhoneNumber || number}
-    </ContactLink>
+    <StyledPhoneButton type="button" onClick={handleDialClick}>
+      {formattedPhoneNumber}
+    </StyledPhoneButton>
   );
 };
