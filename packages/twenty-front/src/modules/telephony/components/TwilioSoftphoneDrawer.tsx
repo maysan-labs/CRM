@@ -203,11 +203,24 @@ export const TwilioSoftphoneDrawer: React.FC = () => {
       case 'CONNECTED':
         return '#22c55e'; // Green
       case 'DIALING':
-        return '#eab308'; // Yellow
+        return '#eab308'; // Yellow (Ringing)
       case 'ENDED':
         return '#ef4444'; // Red
       default:
         return '#9ca3af'; // Gray
+    }
+  };
+
+  const getStatusLabel = () => {
+    switch (callState) {
+      case 'DIALING':
+        return 'Ringing...';
+      case 'CONNECTED':
+        return 'Connected';
+      case 'ENDED':
+        return 'Call Ended';
+      default:
+        return 'Ready';
     }
   };
 
@@ -218,7 +231,7 @@ export const TwilioSoftphoneDrawer: React.FC = () => {
       <StyledHeader>
         <StyledTitle>
           <StyledStatusBadge style={{ backgroundColor: getStatusColor() }} />
-          Twilio Softphone {callState !== 'IDLE' && `(${callState})`}
+          Twilio Softphone ({getStatusLabel()})
         </StyledTitle>
         <StyledCloseButton onClick={toggleDrawer}>✕</StyledCloseButton>
       </StyledHeader>
@@ -233,6 +246,10 @@ export const TwilioSoftphoneDrawer: React.FC = () => {
 
         {callState === 'CONNECTED' && (
           <StyledTimer>Call Duration: {formatDuration(durationSeconds)}</StyledTimer>
+        )}
+
+        {callState === 'DIALING' && (
+          <StyledTimer style={{ color: '#eab308' }}>🔔 Calling recipient...</StyledTimer>
         )}
 
         {callState === 'IDLE' && (

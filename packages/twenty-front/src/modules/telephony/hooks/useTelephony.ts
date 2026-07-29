@@ -6,40 +6,68 @@ export const useTelephony = () => {
 
   // Pre-fills the softphone drawer in IDLE mode for user confirmation
   const openDialer = (phoneNumber: string, contactName?: string) => {
-    setState({
+    setState((prev: TelephonyState) => ({
+      ...prev,
       isDrawerOpen: true,
       callState: 'IDLE',
       phoneNumber,
       contactName: contactName || 'Contact',
       durationSeconds: 0,
       isMuted: false,
-      isMockMode: true,
-    });
+    }));
   };
 
-  // Initiates the actual call after user confirms by clicking "Call"
-  const dial = (phoneNumber: string, contactName?: string) => {
-    setState({
+  // Initiates the actual call (Mock Mode or Live Twilio Mode)
+  const dial = async (phoneNumber: string, contactName?: string) => {
+    setState((prev: TelephonyState) => ({
+      ...prev,
       isDrawerOpen: true,
       callState: 'DIALING',
       phoneNumber,
       contactName: contactName || 'Contact',
       durationSeconds: 0,
       isMuted: false,
-      isMockMode: true,
-    });
+    }));
 
-    setTimeout(() => {
-      setState((prev: TelephonyState) => {
-        if (prev.callState === 'DIALING') {
-          return {
+    if (state.isMockMode) {
+      // Mock Mode Simulation
+      setTimeout(() => {
+        setState((prev: TelephonyState) => {
+          if (prev.callState === 'DIALING') {
+            return {
+              ...prev,
+              callState: 'CONNECTED',
+            };
+          }
+          return prev;
+        });
+      }, 1500);
+    } else {
+      // Live Twilio Mode: Fetch WebRTC Access Token from backend
+      try {
+        const response = await fetch('/telephony/twilio/token');
+        const data = await response.json();
+        if (data.token) {
+          // Token received successfully
+          setState((prev: TelephonyState) => ({
             ...prev,
             callState: 'CONNECTED',
-          };
+          }));
+        } else {
+          console.error('Failed to get Twilio Voice Token:', data);
+          setState((prev: TelephonyState) => ({
+            ...prev,
+            callState: 'ENDED',
+          }));
         }
-        return prev;
-      });
-    }, 1500);
+      } catch (error) {
+        console.error('Twilio Voice Token Error:', error);
+        setState((prev: TelephonyState) => ({
+          ...prev,
+          callState: 'ENDED',
+        }));
+      }
+    }
   };
 
   const hangUp = () => {
@@ -72,6 +100,13 @@ export const useTelephony = () => {
     }));
   };
 
+  const setMockMode = (isMock: boolean) => {
+    setState((prev: TelephonyState) => ({
+      ...prev,
+      isMockMode: isMock,
+    }));
+  };
+
   const formatDuration = (totalSeconds: number): string => {
     const minutes = Math.floor(totalSeconds / 60);
     const seconds = totalSeconds % 60;
@@ -91,6 +126,7 @@ export const useTelephony = () => {
     hangUp,
     toggleMute,
     toggleDrawer,
+    setMockMode,
     formatDuration,
     setState,
   };
