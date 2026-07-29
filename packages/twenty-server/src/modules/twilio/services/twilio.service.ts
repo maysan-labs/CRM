@@ -65,19 +65,20 @@ export class TwilioService {
    * Generates TwiML XML instructions for handling outbound/inbound calls.
    */
   generateTwiMLResponse(to?: string, from?: string): string {
-    const callerId = process.env.TWILIO_PHONE_NUMBER || from || '+10000000000';
+    const callerId = process.env.TWILIO_PHONE_NUMBER || from || '';
+    const serverUrl = process.env.SERVER_URL || 'https://crm.maysanlabs.com';
+    const callbackUrl = `${serverUrl}/telephony/twilio/recording-status`;
 
     if (!to) {
       return `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
-    <Say>Thank you for calling. No destination number was provided.</Say>
+    <Say>No destination number was provided.</Say>
 </Response>`;
     }
 
-    // TwiML directing Twilio to dial the destination and record the audio call
     return `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
-    <Dial callerId="${callerId}" record="record-from-answer" recordingStatusCallback="/webhooks/twilio/recording-status">
+    <Dial callerId="${callerId}" record="record-from-answer" recordingStatusCallback="${callbackUrl}">
         <Number>${to}</Number>
     </Dial>
 </Response>`;
@@ -90,13 +91,6 @@ export class TwilioService {
     this.logger.log(
       `Received Twilio recording callback for CallSid=${payload.CallSid}, Duration=${payload.RecordingDuration}s, URL=${payload.RecordingUrl}`,
     );
-
-    // Recording metadata payload structured for CallRecordingWorkspaceEntity:
-    // - externalRecordingId: payload.RecordingSid
-    // - startedAt: timestamp
-    // - endedAt: timestamp
-    // - audio: [{ url: payload.RecordingUrl }]
-    // - status: CallRecordingStatus.COMPLETED
 
     return {
       success: true,
