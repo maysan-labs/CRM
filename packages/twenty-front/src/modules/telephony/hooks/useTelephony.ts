@@ -1,4 +1,7 @@
-import { telephonyState, type TelephonyState } from '@/telephony/states/telephonyState';
+import {
+  telephonyState,
+  type TelephonyState,
+} from '@/telephony/states/telephonyState';
 import { useAtomState } from '@/ui/utilities/state/jotai/hooks/useAtomState';
 
 export const useTelephony = () => {

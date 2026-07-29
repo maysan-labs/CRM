@@ -21,6 +21,6 @@ export const telephonyState = createAtomState<TelephonyState>({
     contactName: '',
     durationSeconds: 0,
     isMuted: false,
-    isMockMode: true,
+    isMockMode: false, // Set to false to trigger real Twilio WebRTC Voice calls
   },
 });
