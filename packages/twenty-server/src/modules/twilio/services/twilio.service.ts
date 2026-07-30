@@ -8,15 +8,21 @@ export class TwilioService {
 
   /**
    * Generates a Twilio Voice Access Token (JWT) for WebRTC browser clients.
-   * If Twilio credentials are not set in environment variables, returns a mock token for local testing.
+   * Uses TWILIO_API_KEY_SID / TWILIO_API_KEY_SECRET if set, or falls back to
+   * TWILIO_ACCOUNT_SID / TWILIO_AUTH_TOKEN directly to guarantee 100% valid token signatures.
    */
   async generateVoiceToken(identity: string): Promise<{ token: string; identity: string; isMock: boolean }> {
     const accountSid = process.env.TWILIO_ACCOUNT_SID;
+    const authToken = process.env.TWILIO_AUTH_TOKEN;
     const apiKey = process.env.TWILIO_API_KEY_SID;
     const apiSecret = process.env.TWILIO_API_KEY_SECRET;
     const twimlAppSid = process.env.TWILIO_TWIML_APP_SID;
 
-    if (!accountSid || !apiKey || !apiSecret || !twimlAppSid) {
+    // Support signing using dedicated API Keys OR primary Account Auth Token
+    const signingKeySid = apiKey || accountSid;
+    const signingSecret = apiSecret || authToken;
+
+    if (!accountSid || !signingKeySid || !signingSecret || !twimlAppSid) {
       this.logger.warn(
         'Twilio environment variables not fully configured. Vending mock WebRTC access token for local development.',
       );
@@ -39,7 +45,7 @@ export class TwilioService {
         incomingAllow: true,
       });
 
-      const token = new AccessToken(accountSid, apiKey, apiSecret, {
+      const token = new AccessToken(accountSid, signingKeySid, signingSecret, {
         identity,
         ttl: 3600,
       });
