@@ -8,21 +8,15 @@ export class TwilioService {
 
   /**
    * Generates a Twilio Voice Access Token (JWT) for WebRTC browser clients.
-   * Uses TWILIO_API_KEY_SID / TWILIO_API_KEY_SECRET if set, or falls back to
-   * TWILIO_ACCOUNT_SID / TWILIO_AUTH_TOKEN directly to guarantee 100% valid token signatures.
+   * Includes 60s nbf buffer to protect against server clock skew.
    */
   async generateVoiceToken(identity: string): Promise<{ token: string; identity: string; isMock: boolean }> {
-    const accountSid = process.env.TWILIO_ACCOUNT_SID;
-    const authToken = process.env.TWILIO_AUTH_TOKEN;
-    const apiKey = process.env.TWILIO_API_KEY_SID;
-    const apiSecret = process.env.TWILIO_API_KEY_SECRET;
-    const twimlAppSid = process.env.TWILIO_TWIML_APP_SID;
+    const accountSid = process.env.TWILIO_ACCOUNT_SID?.trim();
+    const apiKey = process.env.TWILIO_API_KEY_SID?.trim();
+    const apiSecret = process.env.TWILIO_API_KEY_SECRET?.trim();
+    const twimlAppSid = process.env.TWILIO_TWIML_APP_SID?.trim();
 
-    // Support signing using dedicated API Keys OR primary Account Auth Token
-    const signingKeySid = apiKey || accountSid;
-    const signingSecret = apiSecret || authToken;
-
-    if (!accountSid || !signingKeySid || !signingSecret || !twimlAppSid) {
+    if (!accountSid || !apiKey || !apiSecret || !twimlAppSid) {
       this.logger.warn(
         'Twilio environment variables not fully configured. Vending mock WebRTC access token for local development.',
       );
@@ -31,6 +25,16 @@ export class TwilioService {
         identity,
         isMock: true,
       };
+    }
+
+    if (!accountSid.startsWith('AC')) {
+      this.logger.error(`TWILIO_ACCOUNT_SID must start with "AC" (got "${accountSid.substring(0, 4)}...")`);
+    }
+    if (!apiKey.startsWith('SK')) {
+      this.logger.error(`TWILIO_API_KEY_SID must start with "SK" (got "${apiKey.substring(0, 4)}...")`);
+    }
+    if (!twimlAppSid.startsWith('AP')) {
+      this.logger.error(`TWILIO_TWIML_APP_SID must start with "AP" (got "${twimlAppSid.substring(0, 4)}...")`);
     }
 
     try {
@@ -45,12 +49,16 @@ export class TwilioService {
         incomingAllow: true,
       });
 
-      const token = new AccessToken(accountSid, signingKeySid, signingSecret, {
+      const nowInSeconds = Math.floor(Date.now() / 1000);
+      const token = new AccessToken(accountSid, apiKey, apiSecret, {
         identity,
         ttl: 3600,
+        nbf: nowInSeconds - 60, // 60s buffer against server clock skew
       });
 
       token.addGrant(voiceGrant);
+
+      this.logger.log(`Vended valid WebRTC token for user: ${identity} under Account: ${accountSid.substring(0, 6)}...`);
 
       return {
         token: token.toJwt(),
