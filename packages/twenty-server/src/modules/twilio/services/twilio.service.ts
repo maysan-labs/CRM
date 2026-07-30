@@ -8,9 +8,8 @@ export class TwilioService {
 
   /**
    * Generates a Twilio Voice Access Token (JWT) for WebRTC browser clients.
-   * Includes 60s nbf buffer to protect against server clock skew.
    */
-  async generateVoiceToken(identity: string): Promise<{ token: string; identity: string; isMock: boolean }> {
+  async generateVoiceToken(identity: string): Promise<{ token: string; identity: string; isMock: boolean; missingEnvVars?: any; debug?: any }> {
     const accountSid = process.env.TWILIO_ACCOUNT_SID?.trim();
     const apiKey = process.env.TWILIO_API_KEY_SID?.trim();
     const apiSecret = process.env.TWILIO_API_KEY_SECRET?.trim();
@@ -18,12 +17,18 @@ export class TwilioService {
 
     if (!accountSid || !apiKey || !apiSecret || !twimlAppSid) {
       this.logger.warn(
-        'Twilio environment variables not fully configured. Vending mock WebRTC access token for local development.',
+        'Twilio environment variables not fully configured in backend container. Returning mock token.',
       );
       return {
         token: `mock_twilio_token_${identity}_${Date.now()}`,
         identity,
         isMock: true,
+        missingEnvVars: {
+          TWILIO_ACCOUNT_SID: accountSid ? 'PRESENT' : 'MISSING',
+          TWILIO_API_KEY_SID: apiKey ? 'PRESENT' : 'MISSING',
+          TWILIO_API_KEY_SECRET: apiSecret ? 'PRESENT' : 'MISSING',
+          TWILIO_TWIML_APP_SID: twimlAppSid ? 'PRESENT' : 'MISSING',
+        },
       };
     }
 
@@ -49,21 +54,27 @@ export class TwilioService {
         incomingAllow: true,
       });
 
-      const nowInSeconds = Math.floor(Date.now() / 1000);
       const token = new AccessToken(accountSid, apiKey, apiSecret, {
-        identity,
+        identity: identity,
         ttl: 3600,
-        nbf: nowInSeconds - 60, // 60s buffer against server clock skew
       });
 
+      token.identity = identity;
       token.addGrant(voiceGrant);
 
-      this.logger.log(`Vended valid WebRTC token for user: ${identity} under Account: ${accountSid.substring(0, 6)}...`);
+      const jwtToken = token.toJwt();
+
+      this.logger.log(`Successfully generated WebRTC Token for user: ${identity} | AccountSID: ${accountSid} | KeySID: ${apiKey} | AppSID: ${twimlAppSid}`);
 
       return {
-        token: token.toJwt(),
+        token: jwtToken,
         identity,
         isMock: false,
+        debug: {
+          accountSid,
+          apiKeySid: apiKey,
+          twimlAppSid,
+        },
       };
     } catch (error) {
       this.logger.error('Failed to generate Twilio Voice token', error);
