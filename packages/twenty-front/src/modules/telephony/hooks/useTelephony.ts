@@ -1,4 +1,5 @@
 import { useRef } from 'react';
+import { Device, Call } from '@twilio/voice-sdk';
 
 import {
   telephonyState,
@@ -6,32 +7,10 @@ import {
 } from '@/telephony/states/telephonyState';
 import { useAtomState } from '@/ui/utilities/state/jotai/hooks/useAtomState';
 
-// Helper to dynamically load official Twilio Voice WebRTC SDK script
-const loadTwilioVoiceSdk = (): Promise<any> => {
-  return new Promise((resolve, reject) => {
-    if ((window as any).Twilio?.Device) {
-      resolve((window as any).Twilio);
-      return;
-    }
-    const existingScript = document.getElementById('twilio-voice-sdk');
-    if (existingScript) {
-      existingScript.addEventListener('load', () => resolve((window as any).Twilio));
-      return;
-    }
-    const script = document.createElement('script');
-    script.id = 'twilio-voice-sdk';
-    script.src = 'https://sdk.twilio.com/js/voice/releases/2.10.1/twilio-voice.min.js';
-    script.async = true;
-    script.onload = () => resolve((window as any).Twilio);
-    script.onerror = (err) => reject(err);
-    document.head.appendChild(script);
-  });
-};
-
 export const useTelephony = () => {
   const [state, setState] = useAtomState(telephonyState);
-  const activeCallRef = useRef<any>(null);
-  const deviceRef = useRef<any>(null);
+  const activeCallRef = useRef<Call | null>(null);
+  const deviceRef = useRef<Device | null>(null);
 
   // Pre-fills the softphone drawer in IDLE mode for user confirmation
   const openDialer = (phoneNumber: string, contactName?: string) => {
@@ -86,9 +65,8 @@ export const useTelephony = () => {
           return;
         }
 
-        // Dynamically load Twilio Voice JS SDK & instantiate WebRTC Device
-        const TwilioSdk = await loadTwilioVoiceSdk();
-        const device = new TwilioSdk.Device(data.token, {
+        // Instantiate Twilio WebRTC Device directly from npm package
+        const device = new Device(data.token, {
           codecPreferences: ['opus', 'pcmu'],
         });
         deviceRef.current = device;
