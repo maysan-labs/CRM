@@ -1,5 +1,4 @@
 import { useRef } from 'react';
-import { Device, Call } from '@twilio/voice-sdk';
 
 import {
   telephonyState,
@@ -7,10 +6,39 @@ import {
 } from '@/telephony/states/telephonyState';
 import { useAtomState } from '@/ui/utilities/state/jotai/hooks/useAtomState';
 
+// Helper to get Twilio Voice WebRTC Device class safely without local IDE declaration errors
+const getTwilioVoiceDeviceClass = async (): Promise<any> => {
+  if ((window as any).Twilio?.Device) {
+    return (window as any).Twilio.Device;
+  }
+  try {
+    // Dynamic import to support bundler resolution & SSR safety
+    // @ts-ignore
+    const sdk = await import('@twilio/voice-sdk');
+    return sdk.Device || (sdk as any).default?.Device;
+  } catch {
+    // Fallback: Dynamically load official script tag if package is not present locally
+    return new Promise((resolve, reject) => {
+      const existingScript = document.getElementById('twilio-voice-sdk');
+      if (existingScript) {
+        existingScript.addEventListener('load', () => resolve((window as any).Twilio?.Device));
+        return;
+      }
+      const script = document.createElement('script');
+      script.id = 'twilio-voice-sdk';
+      script.src = 'https://sdk.twilio.com/js/voice/releases/2.10.1/twilio-voice.min.js';
+      script.async = true;
+      script.onload = () => resolve((window as any).Twilio?.Device);
+      script.onerror = (err) => reject(err);
+      document.head.appendChild(script);
+    });
+  }
+};
+
 export const useTelephony = () => {
   const [state, setState] = useAtomState(telephonyState);
-  const activeCallRef = useRef<Call | null>(null);
-  const deviceRef = useRef<Device | null>(null);
+  const activeCallRef = useRef<any>(null);
+  const deviceRef = useRef<any>(null);
 
   // Pre-fills the softphone drawer in IDLE mode for user confirmation
   const openDialer = (phoneNumber: string, contactName?: string) => {
@@ -65,8 +93,13 @@ export const useTelephony = () => {
           return;
         }
 
-        // Instantiate Twilio WebRTC Device directly from npm package
-        const device = new Device(data.token, {
+        // Get Twilio Voice Device class (via package import or safe CDN fallback)
+        const DeviceClass = await getTwilioVoiceDeviceClass();
+        if (!DeviceClass) {
+          throw new Error('Twilio Voice Device SDK could not be loaded');
+        }
+
+        const device = new DeviceClass(data.token, {
           codecPreferences: ['opus', 'pcmu'],
         });
         deviceRef.current = device;
