@@ -1,6 +1,16 @@
 import { createAtomState } from '@/ui/utilities/state/jotai/utils/createAtomState';
 
-export type TelephonyCallState = 'IDLE' | 'DIALING' | 'CONNECTED' | 'INCOMING' | 'ENDED';
+export type TelephonyCallState =
+  | 'IDLE'
+  | 'DIALING'
+  | 'CONNECTED'
+  | 'INCOMING'
+  | 'ENDED'
+  | 'BUSY'
+  | 'CANCELLED'
+  | 'COMPLETED'
+  | 'FAILED'
+  | 'NO_ANSWER';
 
 export interface TelephonyState {
   isDrawerOpen: boolean;
@@ -10,6 +20,7 @@ export interface TelephonyState {
   durationSeconds: number;
   isMuted: boolean;
   isMockMode: boolean;
+  lastErrorMessage?: string;
 }
 
 export const telephonyState = createAtomState<TelephonyState>({
@@ -21,6 +32,7 @@ export const telephonyState = createAtomState<TelephonyState>({
     contactName: '',
     durationSeconds: 0,
     isMuted: false,
-    isMockMode: false, // Set to false to trigger real Twilio WebRTC Voice calls
+    isMockMode: false,
+    lastErrorMessage: undefined,
   },
 });
