@@ -7,7 +7,7 @@ const StyledContainer = styled.div`
   position: fixed;
   bottom: 20px;
   right: 20px;
-  width: 320px;
+  width: 330px;
   background: #1e1f23;
   border: 1px solid #33353d;
   border-radius: 12px;
@@ -40,9 +40,10 @@ const StyledTitle = styled.div`
 `;
 
 const StyledStatusBadge = styled.span`
-  width: 8px;
-  height: 8px;
+  width: 9px;
+  height: 9px;
   border-radius: 50%;
+  display: inline-block;
 `;
 
 const StyledCloseButton = styled.button`
@@ -57,7 +58,7 @@ const StyledCloseButton = styled.button`
 `;
 
 const StyledBody = styled.div`
-  padding: 20px 16px;
+  padding: 18px 16px;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -83,7 +84,20 @@ const StyledPhoneNumberInput = styled.input`
 const StyledTimer = styled.div`
   font-size: 14px;
   color: #a1a5b7;
-  margin-bottom: 16px;
+  margin-bottom: 14px;
+`;
+
+const StyledErrorBanner = styled.div`
+  width: 100%;
+  background: rgba(239, 68, 68, 0.12);
+  border: 1px solid rgba(239, 68, 68, 0.35);
+  border-radius: 8px;
+  padding: 10px 12px;
+  margin-bottom: 12px;
+  color: #fca5a5;
+  font-size: 12px;
+  line-height: 1.4;
+  text-align: center;
 `;
 
 const StyledKeypadGrid = styled.div`
@@ -150,6 +164,7 @@ export const TwilioSoftphoneDrawer: React.FC = () => {
     contactName,
     durationSeconds,
     isMuted,
+    lastErrorMessage,
     dial,
     hangUp,
     toggleMute,
@@ -201,13 +216,21 @@ export const TwilioSoftphoneDrawer: React.FC = () => {
   const getStatusColor = () => {
     switch (callState) {
       case 'CONNECTED':
-        return '#22c55e'; // Green
+        return '#22c55e'; // Green (Connected)
       case 'DIALING':
         return '#eab308'; // Yellow (Ringing)
-      case 'ENDED':
-        return '#ef4444'; // Red
+      case 'BUSY':
+        return '#f97316'; // Amber Orange (Busy)
+      case 'CANCELLED':
+        return '#6b7280'; // Gray (Cancelled)
+      case 'COMPLETED':
+        return '#10b981'; // Emerald (Completed)
+      case 'FAILED':
+        return '#ef4444'; // Red (Failed)
+      case 'NO_ANSWER':
+        return '#3b82f6'; // Blue (No Answer)
       default:
-        return '#9ca3af'; // Gray
+        return '#9ca3af'; // Neutral Gray (Ready)
     }
   };
 
@@ -217,8 +240,16 @@ export const TwilioSoftphoneDrawer: React.FC = () => {
         return 'Ringing...';
       case 'CONNECTED':
         return 'Connected';
-      case 'ENDED':
-        return 'Call Ended';
+      case 'BUSY':
+        return 'Busy';
+      case 'CANCELLED':
+        return 'Cancelled';
+      case 'COMPLETED':
+        return 'Completed';
+      case 'FAILED':
+        return 'Failed';
+      case 'NO_ANSWER':
+        return 'No Answer';
       default:
         return 'Ready';
     }
@@ -249,7 +280,31 @@ export const TwilioSoftphoneDrawer: React.FC = () => {
         )}
 
         {callState === 'DIALING' && (
-          <StyledTimer style={{ color: '#eab308' }}>🔔 Calling recipient...</StyledTimer>
+          <StyledTimer style={{ color: '#eab308' }}>🔔 Dialing recipient...</StyledTimer>
+        )}
+
+        {callState === 'BUSY' && (
+          <StyledErrorBanner style={{ borderColor: '#f97316', color: '#fdba74' }}>
+            ⚠️ Line is currently busy (Busy)
+          </StyledErrorBanner>
+        )}
+
+        {callState === 'CANCELLED' && (
+          <StyledTimer style={{ color: '#9ca3af' }}>⏹️ Call cancelled before pickup</StyledTimer>
+        )}
+
+        {callState === 'COMPLETED' && (
+          <StyledTimer style={{ color: '#10b981' }}>✅ Call completed</StyledTimer>
+        )}
+
+        {callState === 'NO_ANSWER' && (
+          <StyledTimer style={{ color: '#3b82f6' }}>📞 No answer from recipient</StyledTimer>
+        )}
+
+        {callState === 'FAILED' && (
+          <StyledErrorBanner>
+            ⚠️ Call Failed: {lastErrorMessage || 'Check number format or permissions'}
+          </StyledErrorBanner>
         )}
 
         {callState === 'IDLE' && (

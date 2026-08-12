@@ -6,6 +6,37 @@ import {
 } from '@/telephony/states/telephonyState';
 import { useAtomState } from '@/ui/utilities/state/jotai/hooks/useAtomState';
 
+// Helper to translate raw Twilio / WebRTC error codes into clear human-readable explanations
+const parseTwilioError = (error: any): string => {
+  if (!error) return 'Call Failed';
+  const code = error.code || error.status;
+  const message = error.message || error.explanation || error.description || '';
+  
+  if (code === 31005 || message.toLowerCase().includes('permission') || message.toLowerCase().includes('microphone')) {
+    return 'Microphone permission denied by browser';
+  }
+  if (code === 31205 || code === 20101) {
+    return 'Twilio Authentication Token Expired or Invalid';
+  }
+  if (code === 21215) {
+    return 'Geo-Permissions Blocked for destination country';
+  }
+  if (code === 13225) {
+    return 'Profile submission pending or number restricted (Error 13225)';
+  }
+  if (code === 21210) {
+    return 'Destination number unverified (Trial Account)';
+  }
+  if (code === 31002 || message.toLowerCase().includes('timeout')) {
+    return 'Network connection timeout';
+  }
+  
+  if (code && message) {
+    return `Error ${code}: ${message}`;
+  }
+  return message || (code ? `Error Code ${code}` : 'Call Connection Failed');
+};
+
 // Helper to get Twilio Voice WebRTC Device class safely without local IDE declaration errors
 const getTwilioVoiceDeviceClass = async (): Promise<any> => {
   if ((window as any).Twilio?.Device) {
@@ -40,7 +71,6 @@ export const useTelephony = () => {
   const activeCallRef = useRef<any>(null);
   const deviceRef = useRef<any>(null);
 
-  // Pre-fills the softphone drawer in IDLE mode for user confirmation
   const openDialer = (phoneNumber: string, contactName?: string) => {
     setState((prev: TelephonyState) => ({
       ...prev,
@@ -50,23 +80,23 @@ export const useTelephony = () => {
       contactName: contactName || 'Contact',
       durationSeconds: 0,
       isMuted: false,
+      lastErrorMessage: undefined,
     }));
   };
 
-  // Initiates the actual WebRTC call (Mock Mode or Live Twilio Voice Mode)
   const dial = async (phoneNumber: string, contactName?: string) => {
     setState((prev: TelephonyState) => ({
       ...prev,
       isDrawerOpen: true,
-      callState: 'DIALING', // Set status to Ringing...
+      callState: 'DIALING',
       phoneNumber,
       contactName: contactName || 'Contact',
       durationSeconds: 0,
       isMuted: false,
+      lastErrorMessage: undefined,
     }));
 
     if (state.isMockMode) {
-      // Mock Mode Simulation
       setTimeout(() => {
         setState((prev: TelephonyState) => {
           if (prev.callState === 'DIALING') {
@@ -79,7 +109,6 @@ export const useTelephony = () => {
         });
       }, 2000);
     } else {
-      // Live Twilio Mode: Fetch WebRTC Access Token & Connect WebRTC Device
       try {
         const response = await fetch('/telephony/twilio/token');
         const data = await response.json();
@@ -88,12 +117,12 @@ export const useTelephony = () => {
           console.error('Failed to receive Twilio Voice Token:', data);
           setState((prev: TelephonyState) => ({
             ...prev,
-            callState: 'ENDED',
+            callState: 'FAILED',
+            lastErrorMessage: 'Authentication Token Missing from Backend',
           }));
           return;
         }
 
-        // Get Twilio Voice Device class (via package import or safe CDN fallback)
         const DeviceClass = await getTwilioVoiceDeviceClass();
         if (!DeviceClass) {
           throw new Error('Twilio Voice Device SDK could not be loaded');
@@ -106,13 +135,14 @@ export const useTelephony = () => {
 
         device.on('error', (error: any) => {
           console.error('Twilio Voice Device Error:', error);
+          const parsed = parseTwilioError(error);
           setState((prev: TelephonyState) => ({
             ...prev,
-            callState: 'ENDED',
+            callState: 'FAILED',
+            lastErrorMessage: parsed,
           }));
         });
 
-        // Place WebRTC outbound call to Twilio Gateway
         const call = await device.connect({
           params: {
             To: phoneNumber,
@@ -120,7 +150,6 @@ export const useTelephony = () => {
         });
         activeCallRef.current = call;
 
-        // Fired when recipient actually picks up the call
         call.on('accept', () => {
           setState((prev: TelephonyState) => ({
             ...prev,
@@ -128,12 +157,35 @@ export const useTelephony = () => {
           }));
         });
 
-        // Fired when call is hung up or rejected
-        call.on('disconnect', () => {
+        call.on('disconnect', (disconnectedCall: any) => {
+          activeCallRef.current = null;
+          const duration = state.durationSeconds;
+          
+          let nextState: TelephonyState['callState'] = 'COMPLETED';
+          if (duration === 0) {
+            nextState = 'CANCELLED';
+          }
+
+          setState((prev: TelephonyState) => ({
+            ...prev,
+            callState: nextState,
+          }));
+
+          setTimeout(() => {
+            setState((prev: TelephonyState) => ({
+              ...prev,
+              callState: 'IDLE',
+              isDrawerOpen: false,
+              durationSeconds: 0,
+            }));
+          }, 3000);
+        });
+
+        call.on('cancel', () => {
           activeCallRef.current = null;
           setState((prev: TelephonyState) => ({
             ...prev,
-            callState: 'ENDED',
+            callState: 'CANCELLED',
           }));
           setTimeout(() => {
             setState((prev: TelephonyState) => ({
@@ -142,29 +194,41 @@ export const useTelephony = () => {
               isDrawerOpen: false,
               durationSeconds: 0,
             }));
-          }, 1000);
+          }, 3000);
         });
 
-        call.on('cancel', () => {
+        call.on('reject', () => {
           activeCallRef.current = null;
           setState((prev: TelephonyState) => ({
             ...prev,
-            callState: 'ENDED',
+            callState: 'BUSY',
           }));
+          setTimeout(() => {
+            setState((prev: TelephonyState) => ({
+              ...prev,
+              callState: 'IDLE',
+              isDrawerOpen: false,
+              durationSeconds: 0,
+            }));
+          }, 3000);
         });
 
         call.on('error', (err: any) => {
           console.error('Twilio WebRTC Call Error:', err);
+          const parsed = parseTwilioError(err);
           setState((prev: TelephonyState) => ({
             ...prev,
-            callState: 'ENDED',
+            callState: 'FAILED',
+            lastErrorMessage: parsed,
           }));
         });
-      } catch (error) {
+      } catch (error: any) {
         console.error('Twilio WebRTC Error:', error);
+        const parsed = parseTwilioError(error);
         setState((prev: TelephonyState) => ({
           ...prev,
-          callState: 'ENDED',
+          callState: 'FAILED',
+          lastErrorMessage: parsed,
         }));
       }
     }
@@ -181,7 +245,7 @@ export const useTelephony = () => {
 
     setState((prev: TelephonyState) => ({
       ...prev,
-      callState: 'ENDED',
+      callState: prev.durationSeconds > 0 ? 'COMPLETED' : 'CANCELLED',
     }));
 
     setTimeout(() => {
@@ -191,7 +255,7 @@ export const useTelephony = () => {
         isDrawerOpen: false,
         durationSeconds: 0,
       }));
-    }, 1000);
+    }, 2000);
   };
 
   const toggleMute = () => {
@@ -238,6 +302,7 @@ export const useTelephony = () => {
     durationSeconds: state.durationSeconds,
     isMuted: state.isMuted,
     isMockMode: state.isMockMode,
+    lastErrorMessage: state.lastErrorMessage,
     openDialer,
     dial,
     hangUp,
