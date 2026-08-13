@@ -11,7 +11,7 @@
         "cwd": "packages/twenty-server",
         "parallel": false,
         "commands": [
-          "rimraf dist",
+          "npx rimraf --glob dist",
           "nest build --path ./tsconfig.build.json",
           "node -e \"const fs = require('fs'); fs.mkdirSync('dist/assets/twenty-client-sdk', {recursive: true}); fs.copyFileSync('../twenty-client-sdk/package.json', 'dist/assets/twenty-client-sdk/package.json'); fs.cpSync('../twenty-client-sdk/dist', 'dist/assets/twenty-client-sdk/dist', {recursive: true});\""
         ]
