@@ -10,19 +10,19 @@ import { useAtomState } from '@/ui/utilities/state/jotai/hooks/useAtomState';
 const parseTwilioError = (error: any): string => {
   if (!error) return 'Call Failed';
   const code = error.code || error.status;
-  const message = error.message || error.explanation || error.description || '';
+  const message = (error.message || error.explanation || error.description || '').toString();
   
+  if (code === 21215 || message.includes('21215') || message.toLowerCase().includes('geo')) {
+    return 'Geo-Permissions Blocked for destination country';
+  }
+  if (code === 13225 || message.includes('13225') || message.toLowerCase().includes('blacklist')) {
+    return 'Profile submission pending or number restricted (Error 13225)';
+  }
   if (code === 31005 || message.toLowerCase().includes('permission') || message.toLowerCase().includes('microphone')) {
     return 'Microphone permission denied by browser';
   }
   if (code === 31205 || code === 20101) {
     return 'Twilio Authentication Token Expired or Invalid';
-  }
-  if (code === 21215) {
-    return 'Geo-Permissions Blocked for destination country';
-  }
-  if (code === 13225) {
-    return 'Profile submission pending or number restricted (Error 13225)';
   }
   if (code === 21210) {
     return 'Destination number unverified (Trial Account)';
@@ -34,7 +34,7 @@ const parseTwilioError = (error: any): string => {
   if (code && message) {
     return `Error ${code}: ${message}`;
   }
-  return message || (code ? `Error Code ${code}` : 'Call Connection Failed');
+  return message || (code ? `Error Code ${code}` : 'Call Connection Failed (Check Geo-Permissions / Number)');
 };
 
 // Helper to get Twilio Voice WebRTC Device class safely without local IDE declaration errors
@@ -133,15 +133,17 @@ export const useTelephony = () => {
         });
         deviceRef.current = device;
 
-        device.on('error', (error: any) => {
-          console.error('Twilio Voice Device Error:', error);
+        const handleTwilioError = (error: any) => {
+          console.error('Twilio Error Event:', error);
           const parsed = parseTwilioError(error);
           setState((prev: TelephonyState) => ({
             ...prev,
             callState: 'FAILED',
             lastErrorMessage: parsed,
           }));
-        });
+        };
+
+        device.on('error', handleTwilioError);
 
         const call = await device.connect({
           params: {
@@ -157,43 +159,78 @@ export const useTelephony = () => {
           }));
         });
 
+        call.on('error', handleTwilioError);
+
         call.on('disconnect', (disconnectedCall: any) => {
           activeCallRef.current = null;
-          const duration = state.durationSeconds;
-          
-          let nextState: TelephonyState['callState'] = 'COMPLETED';
-          if (duration === 0) {
-            nextState = 'CANCELLED';
-          }
 
-          setState((prev: TelephonyState) => ({
-            ...prev,
-            callState: nextState,
-          }));
+          setState((prev: TelephonyState) => {
+            // Preserve FAILED state if error event set it already
+            if (prev.callState === 'FAILED') {
+              return prev;
+            }
+
+            // Check if disconnected call contains error payload
+            if (disconnectedCall?.code || disconnectedCall?.message || disconnectedCall?.status === 31002) {
+              const parsed = parseTwilioError(disconnectedCall);
+              return {
+                ...prev,
+                callState: 'FAILED',
+                lastErrorMessage: parsed,
+              };
+            }
+
+            const duration = prev.durationSeconds;
+            let nextState: TelephonyState['callState'] = 'COMPLETED';
+            if (duration === 0) {
+              nextState = 'CANCELLED';
+            }
+
+            return {
+              ...prev,
+              callState: nextState,
+            };
+          });
 
           setTimeout(() => {
-            setState((prev: TelephonyState) => ({
-              ...prev,
-              callState: 'IDLE',
-              isDrawerOpen: false,
-              durationSeconds: 0,
-            }));
+            setState((prev: TelephonyState) => {
+              // Keep error message on screen for 6 seconds if FAILED
+              if (prev.callState === 'FAILED') {
+                return prev;
+              }
+              return {
+                ...prev,
+                callState: 'IDLE',
+                isDrawerOpen: false,
+                durationSeconds: 0,
+              };
+            });
           }, 3000);
         });
 
         call.on('cancel', () => {
           activeCallRef.current = null;
-          setState((prev: TelephonyState) => ({
-            ...prev,
-            callState: 'CANCELLED',
-          }));
-          setTimeout(() => {
-            setState((prev: TelephonyState) => ({
+          setState((prev: TelephonyState) => {
+            if (prev.callState === 'FAILED') {
+              return prev;
+            }
+            return {
               ...prev,
-              callState: 'IDLE',
-              isDrawerOpen: false,
-              durationSeconds: 0,
-            }));
+              callState: 'CANCELLED',
+            };
+          });
+          setTimeout(() => {
+            setState((prev: TelephonyState) => {
+              if (prev.callState === 'FAILED') {
+                return prev;
+              }
+              return {
+                ...prev,
+                callState: 'IDLE',
+                isDrawerOpen: false,
+                durationSeconds: 0,
+              };
+            });
           }, 3000);
         });
 
@@ -211,16 +248,6 @@ export const useTelephony = () => {
               durationSeconds: 0,
             }));
           }, 3000);
-        });
-
-        call.on('error', (err: any) => {
-          console.error('Twilio WebRTC Call Error:', err);
-          const parsed = parseTwilioError(err);
-          setState((prev: TelephonyState) => ({
-            ...prev,
-            callState: 'FAILED',
-            lastErrorMessage: parsed,
-          }));
         });
       } catch (error: any) {
         console.error('Twilio WebRTC Error:', error);
