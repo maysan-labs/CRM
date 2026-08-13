@@ -9,32 +9,50 @@ import { useAtomState } from '@/ui/utilities/state/jotai/hooks/useAtomState';
 // Helper to translate raw Twilio / WebRTC error codes into clear human-readable explanations
 const parseTwilioError = (error: any): string => {
   if (!error) return 'Call Blocked (Check Geo-Permissions / Number)';
-  const code = error.code || error.status;
-  const message = (error.message || error.explanation || error.description || '').toString();
   
-  if (code === 21215 || message.includes('21215') || message.toLowerCase().includes('geo')) {
+  // Safely extract code, status, and message, handling cases where they might be functions on the Call object
+  let code = typeof error.code === 'function' ? error.code() : error.code;
+  let status = typeof error.status === 'function' ? error.status() : error.status;
+  
+  let rawMessage = error.message || error.explanation || error.description;
+  let message = typeof rawMessage === 'function' ? rawMessage() : rawMessage;
+  message = (message || '').toString();
+
+  // Use code if it's a number/string, otherwise use status if it's a number
+  const errCode = code || (typeof status === 'number' ? status : undefined);
+
+  if (errCode === 21215 || message.includes('21215') || message.toLowerCase().includes('geo')) {
     return 'Geo-Permissions Blocked for destination country';
   }
-  if (code === 13225 || message.includes('13225') || message.toLowerCase().includes('blacklist')) {
+  if (errCode === 13225 || message.includes('13225') || message.toLowerCase().includes('blacklist')) {
     return 'Profile submission pending or number restricted (Error 13225)';
   }
-  if (code === 31005 || message.toLowerCase().includes('permission') || message.toLowerCase().includes('microphone')) {
+  if (errCode === 31005 || message.toLowerCase().includes('permission') || message.toLowerCase().includes('microphone')) {
     return 'Microphone permission denied by browser';
   }
-  if (code === 31205 || code === 20101) {
+  if (errCode === 31205 || errCode === 20101) {
     return 'Twilio Authentication Token Expired or Invalid';
   }
-  if (code === 21210) {
+  if (errCode === 21210) {
     return 'Destination number unverified (Trial Account)';
   }
-  if (code === 31002 || message.toLowerCase().includes('timeout')) {
+  if (errCode === 31002 || message.toLowerCase().includes('timeout')) {
     return 'Network connection timeout';
   }
   
-  if (code && message) {
-    return `Error ${code}: ${message}`;
+  if (errCode && message && !message.includes('[object Object]')) {
+    return `Error ${errCode}: ${message}`;
   }
-  return message || (code ? `Error Code ${code}` : 'Geo-Permissions Blocked or Restricted Number');
+  
+  if (message && !message.includes('[object Object]')) {
+    return message;
+  }
+  
+  if (errCode) {
+    return `Error Code ${errCode}`;
+  }
+
+  return 'Call Blocked (Check Geo-Permissions / Number)';
 };
 
 // Helper to get Twilio Voice WebRTC Device class safely without local IDE declaration errors
