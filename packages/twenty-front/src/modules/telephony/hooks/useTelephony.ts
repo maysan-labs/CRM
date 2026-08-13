@@ -8,7 +8,7 @@ import { useAtomState } from '@/ui/utilities/state/jotai/hooks/useAtomState';
 
 // Helper to translate raw Twilio / WebRTC error codes into clear human-readable explanations
 const parseTwilioError = (error: any): string => {
-  if (!error) return 'Call Failed';
+  if (!error) return 'Call Blocked (Check Geo-Permissions / Number)';
   const code = error.code || error.status;
   const message = (error.message || error.explanation || error.description || '').toString();
   
@@ -34,7 +34,7 @@ const parseTwilioError = (error: any): string => {
   if (code && message) {
     return `Error ${code}: ${message}`;
   }
-  return message || (code ? `Error Code ${code}` : 'Call Connection Failed (Check Geo-Permissions / Number)');
+  return message || (code ? `Error Code ${code}` : 'Geo-Permissions Blocked or Restricted Number');
 };
 
 // Helper to get Twilio Voice WebRTC Device class safely without local IDE declaration errors
@@ -70,8 +70,10 @@ export const useTelephony = () => {
   const [state, setState] = useAtomState(telephonyState);
   const activeCallRef = useRef<any>(null);
   const deviceRef = useRef<any>(null);
+  const isUserInitiatedHangupRef = useRef<boolean>(false);
 
   const openDialer = (phoneNumber: string, contactName?: string) => {
+    isUserInitiatedHangupRef.current = false;
     setState((prev: TelephonyState) => ({
       ...prev,
       isDrawerOpen: true,
@@ -85,6 +87,7 @@ export const useTelephony = () => {
   };
 
   const dial = async (phoneNumber: string, contactName?: string) => {
+    isUserInitiatedHangupRef.current = false;
     setState((prev: TelephonyState) => ({
       ...prev,
       isDrawerOpen: true,
@@ -165,13 +168,12 @@ export const useTelephony = () => {
           activeCallRef.current = null;
 
           setState((prev: TelephonyState) => {
-            // Preserve FAILED state if error event set it already
             if (prev.callState === 'FAILED') {
               return prev;
             }
 
-            // Check if disconnected call contains error payload
-            if (disconnectedCall?.code || disconnectedCall?.message || disconnectedCall?.status === 31002) {
+            // If disconnected before connect and NOT user-initiated hangup, it was rejected by Twilio
+            if (!isUserInitiatedHangupRef.current && prev.durationSeconds === 0) {
               const parsed = parseTwilioError(disconnectedCall);
               return {
                 ...prev,
@@ -194,7 +196,6 @@ export const useTelephony = () => {
 
           setTimeout(() => {
             setState((prev: TelephonyState) => {
-              // Keep error message on screen for 6 seconds if FAILED
               if (prev.callState === 'FAILED') {
                 return prev;
               }
@@ -208,17 +209,30 @@ export const useTelephony = () => {
           }, 3000);
         });
 
-        call.on('cancel', () => {
+        call.on('cancel', (cancelledCall: any) => {
           activeCallRef.current = null;
+          
           setState((prev: TelephonyState) => {
             if (prev.callState === 'FAILED') {
               return prev;
             }
+
+            // Distinguish user click vs Twilio server-side rejection (Geo-Permissions/Blacklist)
+            if (!isUserInitiatedHangupRef.current) {
+              const parsed = parseTwilioError(cancelledCall);
+              return {
+                ...prev,
+                callState: 'FAILED',
+                lastErrorMessage: parsed,
+              };
+            }
+
             return {
               ...prev,
               callState: 'CANCELLED',
             };
           });
+
           setTimeout(() => {
             setState((prev: TelephonyState) => {
               if (prev.callState === 'FAILED') {
@@ -262,6 +276,7 @@ export const useTelephony = () => {
   };
 
   const hangUp = () => {
+    isUserInitiatedHangupRef.current = true;
     if (activeCallRef.current) {
       activeCallRef.current.disconnect();
       activeCallRef.current = null;
