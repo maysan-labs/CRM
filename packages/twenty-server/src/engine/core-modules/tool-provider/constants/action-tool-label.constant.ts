@@ -11,6 +11,7 @@ export const ACTION_TOOL_IDS = [
   'search_help_center',
   'code_interpreter',
   'navigate_app',
+  'firecrawl_web_search',
 ] as const;
 
 export type ActionToolId = (typeof ACTION_TOOL_IDS)[number];
@@ -36,5 +37,8 @@ export const ACTION_TOOL_LABELS: Record<ActionToolId, ActionToolLabel> = {
   },
   navigate_app: {
     label: i18nLabel(msg`Navigate App`),
+  },
+  firecrawl_web_search: {
+    label: i18nLabel(msg`Firecrawl Web Search`),
   },
 };

@@ -30,6 +30,7 @@ import { NavigateAppTool } from 'src/engine/core-modules/tool/tools/navigate-too
 import { ExtractJsonPathsTool } from 'src/engine/core-modules/tool/tools/output-navigation-tool/extract-json-paths-tool';
 import { SearchOutputTool } from 'src/engine/core-modules/tool/tools/output-navigation-tool/search-output-tool';
 import { SearchHelpCenterTool } from 'src/engine/core-modules/tool/tools/search-help-center-tool/search-help-center-tool';
+import { FirecrawlWebSearchTool } from 'src/engine/core-modules/tool/tools/firecrawl-web-search-tool/firecrawl-web-search-tool';
 import { type ToolOutput } from 'src/engine/core-modules/tool/types/tool-output.type';
 import { type Tool } from 'src/engine/core-modules/tool/types/tool.type';
 import { PermissionsService } from 'src/engine/metadata-modules/permissions/permissions.service';
@@ -46,6 +47,7 @@ export class ActionToolProvider implements ToolProvider {
     private readonly draftEmailTool: DraftEmailTool,
     private readonly createCalendarEventTool: CreateCalendarEventTool,
     private readonly searchHelpCenterTool: SearchHelpCenterTool,
+    private readonly firecrawlWebSearchTool: FirecrawlWebSearchTool,
     private readonly codeInterpreterTool: CodeInterpreterTool,
     private readonly navigateAppTool: NavigateAppTool,
     private readonly extractJsonPathsTool: ExtractJsonPathsTool,
@@ -60,6 +62,7 @@ export class ActionToolProvider implements ToolProvider {
       ['draft_email', this.draftEmailTool],
       ['create_calendar_event', this.createCalendarEventTool],
       ['search_help_center', this.searchHelpCenterTool],
+      ['firecrawl_web_search', this.firecrawlWebSearchTool],
       ['code_interpreter', this.codeInterpreterTool],
       ['navigate_app', this.navigateAppTool],
       ['extract_json_paths', this.extractJsonPathsTool],
@@ -142,6 +145,15 @@ export class ActionToolProvider implements ToolProvider {
       this.buildDescriptor(
         'search_help_center',
         this.searchHelpCenterTool,
+        includeSchemas,
+        context.locale,
+      ),
+    );
+
+    descriptors.push(
+      this.buildDescriptor(
+        'firecrawl_web_search',
+        this.firecrawlWebSearchTool,
         includeSchemas,
         context.locale,
       ),
