@@ -32,6 +32,9 @@ services:
       TWILIO_TWIML_APP_SID: ${TWILIO_TWIML_APP_SID}
       TWILIO_PHONE_NUMBER: ${TWILIO_PHONE_NUMBER}
 
+      FIRECRAWL_API_KEY: ${FIRECRAWL_API_KEY}
+      FIRECRAWL_BASE_URL: ${FIRECRAWL_BASE_URL}
+
     depends_on:
       db:
         condition: service_healthy
@@ -67,6 +70,9 @@ services:
       ENCRYPTION_KEY: ${ENCRYPTION_KEY}
       FALLBACK_ENCRYPTION_KEY: ${FALLBACK_ENCRYPTION_KEY}
       APP_SECRET: ${APP_SECRET:-}
+
+      FIRECRAWL_API_KEY: ${FIRECRAWL_API_KEY}
+      FIRECRAWL_BASE_URL: ${FIRECRAWL_BASE_URL}
 
     depends_on:
       db:

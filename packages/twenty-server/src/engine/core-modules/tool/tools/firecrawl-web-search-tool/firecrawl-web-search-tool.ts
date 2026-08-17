@@ -28,21 +28,30 @@ export class FirecrawlWebSearchTool implements Tool {
 
     try {
       const apiKey = process.env.FIRECRAWL_API_KEY;
-      const baseUrl = process.env.FIRECRAWL_BASE_URL || 'https://api.firecrawl.dev';
+      const baseUrl = process.env.FIRECRAWL_BASE_URL;
 
-      if (!apiKey) {
+      if (!apiKey && !baseUrl) {
         return {
           success: false,
-          message: 'Firecrawl API key is not configured in the server environment (FIRECRAWL_API_KEY).',
+          message:
+            'Firecrawl is not configured in the server environment (FIRECRAWL_API_KEY or FIRECRAWL_BASE_URL missing).',
         };
       }
 
-      const endpoint = `${baseUrl}/v1/search`;
+      const activeBaseUrl = (baseUrl || 'https://api.firecrawl.dev').replace(/\/+$/, '');
+      const effectiveApiKey = apiKey || 'local';
 
-      const headers = {
+      const endpoint = activeBaseUrl.endsWith('/v1')
+        ? `${activeBaseUrl}/search`
+        : `${activeBaseUrl}/v1/search`;
+
+      const headers: Record<string, string> = {
         'Content-Type': 'application/json',
-        Authorization: `Bearer ${apiKey}`,
       };
+
+      if (effectiveApiKey) {
+        headers['Authorization'] = `Bearer ${effectiveApiKey}`;
+      }
 
       const httpClient = this.secureHttpClientService.getHttpClient();
 
