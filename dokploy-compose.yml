@@ -2,6 +2,7 @@ name: twenty
 
 services:
   server:
+    image: twenty-app:latest
     build:
       context: .
       dockerfile: packages/twenty-docker/twenty/Dockerfile
@@ -48,10 +49,7 @@ services:
     restart: always
 
   worker:
-    build:
-      context: .
-      dockerfile: packages/twenty-docker/twenty/Dockerfile
-      target: twenty
+    image: twenty-app:latest
     volumes:
       - server-local-data:/app/packages/twenty-server/.local-storage
     command: ["yarn", "worker:prod"]
