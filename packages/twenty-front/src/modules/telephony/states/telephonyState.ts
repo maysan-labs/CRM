@@ -20,6 +20,7 @@ export interface TelephonyState {
   durationSeconds: number;
   isMuted: boolean;
   isMockMode: boolean;
+  activeProvider: 'telnyx' | 'twilio';
   lastErrorMessage?: string;
 }
 
@@ -33,6 +34,7 @@ export const telephonyState = createAtomState<TelephonyState>({
     durationSeconds: 0,
     isMuted: false,
     isMockMode: false,
+    activeProvider: 'telnyx',
     lastErrorMessage: undefined,
   },
 });

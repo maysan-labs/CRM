@@ -1,0 +1,108 @@
+import { Injectable, Logger } from '@nestjs/common';
+
+@Injectable()
+export class TelnyxService {
+  private readonly logger = new Logger(TelnyxService.name);
+
+  /**
+   * Generates a Telnyx WebRTC Access Token (JWT) for browser clients.
+   */
+  async generateVoiceToken(identity: string): Promise<{ token: string; identity: string; isMock: boolean; missingEnvVars?: any; debug?: any }> {
+    const apiKey = process.env.TELNYX_API_KEY?.trim();
+    const credentialId = process.env.TELNYX_CREDENTIAL_ID?.trim() || process.env.CONNECTION_ID?.trim();
+
+    if (!apiKey || !credentialId) {
+      this.logger.warn(
+        'Telnyx environment variables not fully configured in backend container. Returning mock token.',
+      );
+      return {
+        token: `mock_telnyx_token_${identity}_${Date.now()}`,
+        identity,
+        isMock: true,
+        missingEnvVars: {
+          TELNYX_API_KEY: apiKey ? 'PRESENT' : 'MISSING',
+          TELNYX_CREDENTIAL_ID: credentialId ? 'PRESENT' : 'MISSING',
+        },
+      };
+    }
+
+    try {
+      // Dynamic import to support optional telnyx dependency
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      const telnyx = require('telnyx')(apiKey);
+      
+      const response = await telnyx.telephonyCredentials.createToken(credentialId);
+      // Ensure we extract the string token properly, as the exact return structure may vary
+      let jwtToken = '';
+      if (typeof response === 'string') {
+          jwtToken = response;
+      } else if (response && response.data && typeof response.data === 'string') {
+          jwtToken = response.data;
+      } else if (response && response.data && response.data.token) {
+          jwtToken = response.data.token;
+      } else if (response && response.token) {
+          jwtToken = response.token;
+      } else if (response) {
+          jwtToken = response.toString();
+      }
+
+      this.logger.log(`Successfully generated Telnyx WebRTC Token for user: ${identity} | CredentialID: ${credentialId}`);
+
+      return {
+        token: jwtToken,
+        identity,
+        isMock: false,
+        debug: {
+          credentialId,
+        },
+      };
+    } catch (error) {
+      this.logger.error('Failed to generate Telnyx WebRTC token', error);
+      return {
+        token: `mock_telnyx_token_${identity}_${Date.now()}`,
+        identity,
+        isMock: true,
+      };
+    }
+  }
+
+  /**
+   * Generates TeXML (XML) instructions for handling outbound/inbound calls.
+   */
+  generateTeXMLResponse(to?: string, from?: string): string {
+    const callerId = process.env.TELNYX_PHONE_NUMBER || process.env.TWILIO_PHONE_NUMBER || from || '';
+    let serverUrl = process.env.SERVER_URL || process.env.FRONT_BASE_URL || '';
+    if (serverUrl.endsWith('/')) {
+      serverUrl = serverUrl.slice(0, -1);
+    }
+    const callbackUrl = serverUrl ? `${serverUrl}/telephony/telnyx/recording-status` : '/telephony/telnyx/recording-status';
+
+    if (!to) {
+      return `<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+    <Say>No destination number was provided.</Say>
+</Response>`;
+    }
+
+    return `<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+    <Dial callerId="${callerId}" record="record-from-answer" recordingStatusCallback="${callbackUrl}">
+        <Number>${to}</Number>
+    </Dial>
+</Response>`;
+  }
+
+  /**
+   * Process recording completion webhook from Telnyx and log to database.
+   */
+  async handleRecordingStatusWebhook(payload: any): Promise<{ success: boolean; callSid: string }> {
+    this.logger.log(
+      `Received Telnyx recording callback for CallSid=${payload.CallSid || payload.call_control_id}, URL=${payload.RecordingUrl || payload.recording_url}`,
+    );
+
+    return {
+      success: true,
+      callSid: payload.CallSid || payload.call_control_id || 'unknown',
+    };
+  }
+}

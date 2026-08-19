@@ -156,6 +156,29 @@ const StyledMuteButton = styled.button`
   cursor: pointer;
 `;
 
+const StyledProviderToggle = styled.div`
+  display: flex;
+  gap: 8px;
+  margin-bottom: 12px;
+  width: 100%;
+  justify-content: center;
+`;
+
+const StyledProviderButton = styled.button<{ active: boolean }>`
+  background: ${(props) => (props.active ? '#3b82f6' : '#282a30')};
+  color: #fff;
+  border: 1px solid ${(props) => (props.active ? '#3b82f6' : '#33353d')};
+  padding: 6px 12px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+  &:hover {
+    background: ${(props) => (props.active ? '#2563eb' : '#33353d')};
+  }
+`;
+
 export const TwilioSoftphoneDrawer: React.FC = () => {
   const {
     isDrawerOpen,
@@ -165,10 +188,12 @@ export const TwilioSoftphoneDrawer: React.FC = () => {
     durationSeconds,
     isMuted,
     lastErrorMessage,
+    activeProvider,
     dial,
     hangUp,
     toggleMute,
     toggleDrawer,
+    setProvider,
     formatDuration,
     setState,
   } = useTelephony();
@@ -262,12 +287,29 @@ export const TwilioSoftphoneDrawer: React.FC = () => {
       <StyledHeader>
         <StyledTitle>
           <StyledStatusBadge style={{ backgroundColor: getStatusColor() }} />
-          Twilio Softphone ({getStatusLabel()})
+          Softphone ({getStatusLabel()})
         </StyledTitle>
         <StyledCloseButton onClick={toggleDrawer}>✕</StyledCloseButton>
       </StyledHeader>
 
       <StyledBody>
+        {callState === 'IDLE' && (
+          <StyledProviderToggle>
+            <StyledProviderButton 
+              active={activeProvider === 'telnyx'} 
+              onClick={() => setProvider('telnyx')}
+            >
+              Telnyx (Primary)
+            </StyledProviderButton>
+            <StyledProviderButton 
+              active={activeProvider === 'twilio'} 
+              onClick={() => setProvider('twilio')}
+            >
+              Twilio (Backup)
+            </StyledProviderButton>
+          </StyledProviderToggle>
+        )}
+
         <StyledPhoneNumberInput
           value={callState !== 'IDLE' ? phoneNumber : inputNumber}
           onChange={(e) => setInputNumber(e.target.value)}
@@ -331,7 +373,7 @@ export const TwilioSoftphoneDrawer: React.FC = () => {
             style={{ backgroundColor: isCallActive ? '#ef4444' : '#22c55e' }}
             onClick={handleDialClick}
           >
-            {isCallActive ? 'End Call' : 'Call'}
+            {isCallActive ? 'End Call' : `Call via ${activeProvider === 'telnyx' ? 'Telnyx' : 'Twilio'}`}
           </StyledCallButton>
         </StyledActionsRow>
       </StyledBody>

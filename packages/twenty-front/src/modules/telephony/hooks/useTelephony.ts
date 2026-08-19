@@ -31,7 +31,7 @@ const parseTwilioError = (error: any): string => {
     return 'Microphone permission denied by browser';
   }
   if (errCode === 31205 || errCode === 20101) {
-    return 'Twilio Authentication Token Expired or Invalid';
+    return 'Authentication Token Expired or Invalid';
   }
   if (errCode === 21210) {
     return 'Destination number unverified (Trial Account)';
@@ -55,18 +55,16 @@ const parseTwilioError = (error: any): string => {
   return 'Call Blocked (Check Geo-Permissions / Number)';
 };
 
-// Helper to get Twilio Voice WebRTC Device class safely without local IDE declaration errors
+// Helper to get Twilio Voice WebRTC Device class safely
 const getTwilioVoiceDeviceClass = async (): Promise<any> => {
   if ((window as any).Twilio?.Device) {
     return (window as any).Twilio.Device;
   }
   try {
-    // Dynamic import to support bundler resolution & SSR safety
     // @ts-ignore
     const sdk = await import('@twilio/voice-sdk');
     return sdk.Device || (sdk as any).default?.Device;
   } catch {
-    // Fallback: Dynamically load official script tag if package is not present locally
     return new Promise((resolve, reject) => {
       const existingScript = document.getElementById('twilio-voice-sdk');
       if (existingScript) {
@@ -81,6 +79,18 @@ const getTwilioVoiceDeviceClass = async (): Promise<any> => {
       script.onerror = (err) => reject(err);
       document.head.appendChild(script);
     });
+  }
+};
+
+// Helper to get Telnyx WebRTC Device class safely
+const getTelnyxVoiceDeviceClass = async (): Promise<any> => {
+  try {
+    // @ts-ignore
+    const sdk = await import('@telnyx/webrtc');
+    return sdk.TelnyxRTC || (sdk as any).default?.TelnyxRTC;
+  } catch (error) {
+    console.error('Failed to load @telnyx/webrtc', error);
+    throw error;
   }
 };
 
@@ -129,177 +139,166 @@ export const useTelephony = () => {
           return prev;
         });
       }, 2000);
-    } else {
-      try {
-        const response = await fetch('/telephony/twilio/token');
-        const data = await response.json();
+      return;
+    }
 
-        if (!data.token) {
-          console.error('Failed to receive Twilio Voice Token:', data);
-          setState((prev: TelephonyState) => ({
-            ...prev,
-            callState: 'FAILED',
-            lastErrorMessage: 'Authentication Token Missing from Backend',
-          }));
-          return;
-        }
+    try {
+      const provider = state.activeProvider;
+      const endpoint = provider === 'telnyx' ? '/telephony/telnyx/token' : '/telephony/twilio/token';
+      
+      const response = await fetch(endpoint);
+      const data = await response.json();
 
-        const DeviceClass = await getTwilioVoiceDeviceClass();
-        if (!DeviceClass) {
-          throw new Error('Twilio Voice Device SDK could not be loaded');
-        }
+      if (!data.token) {
+        console.error(`Failed to receive ${provider} Token:`, data);
+        setState((prev: TelephonyState) => ({
+          ...prev,
+          callState: 'FAILED',
+          lastErrorMessage: 'Authentication Token Missing from Backend',
+        }));
+        return;
+      }
 
-        const device = new DeviceClass(data.token, {
-          codecPreferences: ['opus', 'pcmu'],
-        });
-        deviceRef.current = device;
-
-        const handleTwilioError = (error: any) => {
-          console.error('Twilio Error Event:', error);
-          const parsed = parseTwilioError(error);
-          setState((prev: TelephonyState) => ({
-            ...prev,
-            callState: 'FAILED',
-            lastErrorMessage: parsed,
-          }));
-        };
-
-        device.on('error', handleTwilioError);
-
-        const call = await device.connect({
-          params: {
-            To: phoneNumber,
-          },
-        });
-        activeCallRef.current = call;
-
-        call.on('accept', () => {
-          setState((prev: TelephonyState) => ({
-            ...prev,
-            callState: 'CONNECTED',
-          }));
-        });
-
-        call.on('error', handleTwilioError);
-
-        call.on('disconnect', (disconnectedCall: any) => {
-          activeCallRef.current = null;
-
-          setState((prev: TelephonyState) => {
-            if (prev.callState === 'FAILED') {
-              return prev;
-            }
-
-            // If disconnected before connect and NOT user-initiated hangup, it was rejected by Twilio
-            if (!isUserInitiatedHangupRef.current && prev.durationSeconds === 0) {
-              const parsed = parseTwilioError(disconnectedCall);
-              return {
-                ...prev,
-                callState: 'FAILED',
-                lastErrorMessage: parsed,
-              };
-            }
-
-            const duration = prev.durationSeconds;
-            let nextState: TelephonyState['callState'] = 'COMPLETED';
-            if (duration === 0) {
-              nextState = 'CANCELLED';
-            }
-
-            return {
-              ...prev,
-              callState: nextState,
-            };
-          });
-
-          setTimeout(() => {
-            setState((prev: TelephonyState) => {
-              if (prev.callState === 'FAILED') {
-                return prev;
-              }
-              return {
-                ...prev,
-                callState: 'IDLE',
-                isDrawerOpen: false,
-                durationSeconds: 0,
-              };
-            });
-          }, 3000);
-        });
-
-        call.on('cancel', (cancelledCall: any) => {
-          activeCallRef.current = null;
-          
-          setState((prev: TelephonyState) => {
-            if (prev.callState === 'FAILED') {
-              return prev;
-            }
-
-            // Distinguish user click vs Twilio server-side rejection (Geo-Permissions/Blacklist)
-            if (!isUserInitiatedHangupRef.current) {
-              const parsed = parseTwilioError(cancelledCall);
-              return {
-                ...prev,
-                callState: 'FAILED',
-                lastErrorMessage: parsed,
-              };
-            }
-
-            return {
-              ...prev,
-              callState: 'CANCELLED',
-            };
-          });
-
-          setTimeout(() => {
-            setState((prev: TelephonyState) => {
-              if (prev.callState === 'FAILED') {
-                return prev;
-              }
-              return {
-                ...prev,
-                callState: 'IDLE',
-                isDrawerOpen: false,
-                durationSeconds: 0,
-              };
-            });
-          }, 3000);
-        });
-
-        call.on('reject', () => {
-          activeCallRef.current = null;
-          setState((prev: TelephonyState) => ({
-            ...prev,
-            callState: 'BUSY',
-          }));
-          setTimeout(() => {
-            setState((prev: TelephonyState) => ({
-              ...prev,
-              callState: 'IDLE',
-              isDrawerOpen: false,
-              durationSeconds: 0,
-            }));
-          }, 3000);
-        });
-      } catch (error: any) {
-        console.error('Twilio WebRTC Error:', error);
+      const handleError = (error: any) => {
+        console.error(`${provider} Error Event:`, error);
         const parsed = parseTwilioError(error);
         setState((prev: TelephonyState) => ({
           ...prev,
           callState: 'FAILED',
           lastErrorMessage: parsed,
         }));
+      };
+
+      if (provider === 'telnyx') {
+        const TelnyxRTC = await getTelnyxVoiceDeviceClass();
+        if (!TelnyxRTC) throw new Error('Telnyx SDK could not be loaded');
+
+        const client = new TelnyxRTC({
+          login_token: data.token,
+        });
+        deviceRef.current = client;
+
+        client.on('telnyx.error', handleError);
+        client.on('telnyx.socket.error', handleError);
+
+        client.connect();
+
+        client.on('telnyx.ready', () => {
+          let audioEl = document.getElementById('telnyx-audio') as HTMLAudioElement;
+          if (!audioEl) {
+            audioEl = document.createElement('audio');
+            audioEl.id = 'telnyx-audio';
+            audioEl.autoplay = true;
+            document.body.appendChild(audioEl);
+          }
+
+          const call = client.newCall({
+            destinationNumber: phoneNumber,
+            audio: true,
+            video: false,
+          });
+          
+          activeCallRef.current = call;
+
+          call.on('telnyx.call.answered', () => {
+             setState((prev: TelephonyState) => ({ ...prev, callState: 'CONNECTED' }));
+          });
+
+          call.on('telnyx.call.rejected', () => {
+             setState((prev: TelephonyState) => ({ ...prev, callState: 'BUSY' }));
+             setTimeout(() => {
+                setState((prev: TelephonyState) => ({ ...prev, callState: 'IDLE', isDrawerOpen: false, durationSeconds: 0 }));
+             }, 3000);
+          });
+
+          call.on('telnyx.call.hangup', (cancelledCall: any) => {
+             activeCallRef.current = null;
+             setState((prev: TelephonyState) => {
+               if (prev.callState === 'FAILED') return prev;
+               if (!isUserInitiatedHangupRef.current && prev.durationSeconds === 0) {
+                 return { ...prev, callState: 'FAILED', lastErrorMessage: parseTwilioError(cancelledCall) };
+               }
+               return { ...prev, callState: prev.durationSeconds > 0 ? 'COMPLETED' : 'CANCELLED' };
+             });
+
+             setTimeout(() => {
+               setState((prev: TelephonyState) => {
+                 if (prev.callState === 'FAILED') return prev;
+                 return { ...prev, callState: 'IDLE', isDrawerOpen: false, durationSeconds: 0 };
+               });
+             }, 3000);
+          });
+        });
+      } else {
+        // TWILIO
+        const DeviceClass = await getTwilioVoiceDeviceClass();
+        if (!DeviceClass) throw new Error('Twilio Voice Device SDK could not be loaded');
+
+        const device = new DeviceClass(data.token, { codecPreferences: ['opus', 'pcmu'] });
+        deviceRef.current = device;
+        device.on('error', handleError);
+
+        const call = await device.connect({ params: { To: phoneNumber } });
+        activeCallRef.current = call;
+
+        call.on('accept', () => setState((prev: TelephonyState) => ({ ...prev, callState: 'CONNECTED' })));
+        call.on('error', handleError);
+
+        call.on('disconnect', (disconnectedCall: any) => {
+          activeCallRef.current = null;
+          setState((prev: TelephonyState) => {
+            if (prev.callState === 'FAILED') return prev;
+            if (!isUserInitiatedHangupRef.current && prev.durationSeconds === 0) {
+              return { ...prev, callState: 'FAILED', lastErrorMessage: parseTwilioError(disconnectedCall) };
+            }
+            return { ...prev, callState: prev.durationSeconds > 0 ? 'COMPLETED' : 'CANCELLED' };
+          });
+          setTimeout(() => setState((prev: TelephonyState) => (prev.callState === 'FAILED' ? prev : { ...prev, callState: 'IDLE', isDrawerOpen: false, durationSeconds: 0 })), 3000);
+        });
+
+        call.on('cancel', (cancelledCall: any) => {
+          activeCallRef.current = null;
+          setState((prev: TelephonyState) => {
+            if (prev.callState === 'FAILED') return prev;
+            if (!isUserInitiatedHangupRef.current) {
+              return { ...prev, callState: 'FAILED', lastErrorMessage: parseTwilioError(cancelledCall) };
+            }
+            return { ...prev, callState: 'CANCELLED' };
+          });
+          setTimeout(() => setState((prev: TelephonyState) => (prev.callState === 'FAILED' ? prev : { ...prev, callState: 'IDLE', isDrawerOpen: false, durationSeconds: 0 })), 3000);
+        });
+
+        call.on('reject', () => {
+          activeCallRef.current = null;
+          setState((prev: TelephonyState) => ({ ...prev, callState: 'BUSY' }));
+          setTimeout(() => setState((prev: TelephonyState) => ({ ...prev, callState: 'IDLE', isDrawerOpen: false, durationSeconds: 0 })), 3000);
+        });
       }
+    } catch (error: any) {
+      console.error('WebRTC Error:', error);
+      setState((prev: TelephonyState) => ({
+        ...prev,
+        callState: 'FAILED',
+        lastErrorMessage: parseTwilioError(error),
+      }));
     }
   };
 
   const hangUp = () => {
     isUserInitiatedHangupRef.current = true;
     if (activeCallRef.current) {
-      activeCallRef.current.disconnect();
+      if (state.activeProvider === 'telnyx' && typeof activeCallRef.current.hangup === 'function') {
+        activeCallRef.current.hangup();
+      } else if (typeof activeCallRef.current.disconnect === 'function') {
+        activeCallRef.current.disconnect();
+      }
       activeCallRef.current = null;
     } else if (deviceRef.current) {
-      deviceRef.current.destroy();
+      if (state.activeProvider === 'telnyx' && typeof deviceRef.current.disconnect === 'function') {
+        deviceRef.current.disconnect();
+      } else if (typeof deviceRef.current.destroy === 'function') {
+        deviceRef.current.destroy();
+      }
       deviceRef.current = null;
     }
 
@@ -320,11 +319,19 @@ export const useTelephony = () => {
 
   const toggleMute = () => {
     if (activeCallRef.current) {
-      const currentMute = activeCallRef.current.isMuted();
-      activeCallRef.current.mute(!currentMute);
+      if (state.activeProvider === 'telnyx') {
+         if (state.isMuted) {
+           activeCallRef.current.unmuteAudio();
+         } else {
+           activeCallRef.current.muteAudio();
+         }
+      } else {
+        const currentMute = activeCallRef.current.isMuted();
+        activeCallRef.current.mute(!currentMute);
+      }
       setState((prev: TelephonyState) => ({
         ...prev,
-        isMuted: !currentMute,
+        isMuted: !prev.isMuted,
       }));
     } else {
       setState((prev: TelephonyState) => ({
@@ -347,6 +354,13 @@ export const useTelephony = () => {
       isMockMode: isMock,
     }));
   };
+  
+  const setProvider = (provider: 'telnyx' | 'twilio') => {
+    setState((prev: TelephonyState) => ({
+      ...prev,
+      activeProvider: provider,
+    }));
+  };
 
   const formatDuration = (totalSeconds: number): string => {
     const minutes = Math.floor(totalSeconds / 60);
@@ -362,6 +376,7 @@ export const useTelephony = () => {
     durationSeconds: state.durationSeconds,
     isMuted: state.isMuted,
     isMockMode: state.isMockMode,
+    activeProvider: state.activeProvider,
     lastErrorMessage: state.lastErrorMessage,
     openDialer,
     dial,
@@ -369,6 +384,7 @@ export const useTelephony = () => {
     toggleMute,
     toggleDrawer,
     setMockMode,
+    setProvider,
     formatDuration,
     setState,
   };
