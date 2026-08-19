@@ -35,7 +35,9 @@ export class TelnyxService {
 
       // Intelligently resolve the Telephony Credential ID if the user provided a SIP Connection ID
       try {
-        const credentialsList = await telnyx.telephonyCredentials.list({ filter: { connection_id: credentialId } });
+        const credentialsList = await telnyx.telephonyCredentials.list({ 
+          filter: { resource_id: `connection:${credentialId}` } 
+        });
         if (credentialsList?.data && credentialsList.data.length > 0) {
           activeCredentialId = credentialsList.data[0].id;
           this.logger.log(`Resolved SIP Connection ID to Telephony Credential ID: ${activeCredentialId}`);
