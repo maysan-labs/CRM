@@ -163,7 +163,7 @@
     "sns-payload-validator": "^2.1.0",
     "stripe": "20.4.1",
     "tar": "^7.5.9",
-    "telnyx": "^2.15.0",
+    "telnyx": "^7.14.0",
     "temporal-polyfill": "^0.3.0",
     "tsconfig-paths": "^4.2.0",
     "tsdav": "^2.2.0",
