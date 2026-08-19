@@ -78,10 +78,11 @@ export class TelnyxService {
           credentialId,
         },
       };
-    } catch (error) {
+    } catch (error: any) {
       this.logger.error('Failed to generate Telnyx WebRTC token', error);
+      const errMsg = error?.message ? error.message.replace(/[^a-zA-Z0-9]/g, '_') : 'unknown_error';
       return {
-        token: `mock_telnyx_token_${identity}_${Date.now()}`,
+        token: `mock_telnyx_token_ERROR_${errMsg}_${Date.now()}`,
         identity,
         isMock: true,
       };
