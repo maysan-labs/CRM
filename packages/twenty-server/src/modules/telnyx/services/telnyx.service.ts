@@ -41,6 +41,13 @@ export class TelnyxService {
         if (credentialsList?.data && credentialsList.data.length > 0) {
           activeCredentialId = credentialsList.data[0].id;
           this.logger.log(`Resolved SIP Connection ID to Telephony Credential ID: ${activeCredentialId}`);
+        } else {
+          // If 0 credentials exist, automatically provision one for WebRTC!
+          const newCredential = await telnyx.telephonyCredentials.create({ connection_id: credentialId });
+          if (newCredential?.data?.id) {
+             activeCredentialId = newCredential.data.id;
+             this.logger.log(`Auto-provisioned new Telephony Credential ID: ${activeCredentialId}`);
+          }
         }
       } catch (e) {
          // Silently ignore: The ID might already be a valid Telephony Credential ID, or the API call failed.
