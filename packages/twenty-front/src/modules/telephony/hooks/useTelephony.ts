@@ -203,35 +203,34 @@ export const useTelephony = () => {
           });
           
           activeCallRef.current = call;
+        });
 
-          call.on('telnyx.call.answered', () => {
-             setState((prev: TelephonyState) => ({ ...prev, callState: 'CONNECTED' }));
-          });
-
-          call.on('telnyx.call.rejected', () => {
-             setState((prev: TelephonyState) => ({ ...prev, callState: 'BUSY' }));
-             setTimeout(() => {
-                setState((prev: TelephonyState) => ({ ...prev, callState: 'IDLE', isDrawerOpen: false, durationSeconds: 0 }));
-             }, 3000);
-          });
-
-          call.on('telnyx.call.hangup', (cancelledCall: any) => {
-             activeCallRef.current = null;
-             setState((prev: TelephonyState) => {
-               if (prev.callState === 'FAILED') return prev;
-               if (!isUserInitiatedHangupRef.current && prev.durationSeconds === 0) {
-                 return { ...prev, callState: 'FAILED', lastErrorMessage: parseTwilioError(cancelledCall) };
-               }
-               return { ...prev, callState: prev.durationSeconds > 0 ? 'COMPLETED' : 'CANCELLED' };
-             });
-
-             setTimeout(() => {
-               setState((prev: TelephonyState) => {
-                 if (prev.callState === 'FAILED') return prev;
-                 return { ...prev, callState: 'IDLE', isDrawerOpen: false, durationSeconds: 0 };
-               });
-             }, 3000);
-          });
+        // Handle all call events at the client level
+        client.on('telnyx.notification', (notification: any) => {
+          if (notification.type === 'callUpdate') {
+            const call = notification.call;
+            
+            if (call.state === 'active') {
+              setState((prev: TelephonyState) => ({ ...prev, callState: 'CONNECTED' }));
+            }
+            
+            if (call.state === 'hangup' || call.state === 'destroy') {
+              activeCallRef.current = null;
+              setState((prev: TelephonyState) => {
+                if (prev.callState === 'FAILED') return prev;
+                if (!isUserInitiatedHangupRef.current && prev.durationSeconds === 0) {
+                  return { ...prev, callState: 'FAILED', lastErrorMessage: 'Call Ended' };
+                }
+                return { ...prev, callState: prev.durationSeconds > 0 ? 'COMPLETED' : 'CANCELLED' };
+              });
+              setTimeout(() => {
+                setState((prev: TelephonyState) => {
+                  if (prev.callState === 'FAILED') return prev;
+                  return { ...prev, callState: 'IDLE', isDrawerOpen: false, durationSeconds: 0 };
+                });
+              }, 3000);
+            }
+          }
         });
       } else {
         // TWILIO
