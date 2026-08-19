@@ -159,6 +159,10 @@ export const useTelephony = () => {
         return;
       }
 
+      console.error('================================================');
+      console.error('RECEIVED TOKEN FROM BACKEND:', data.token);
+      console.error('================================================');
+
       const handleError = (error: any) => {
         console.error(`${provider} Error Event:`, error);
         const parsed = parseTwilioError(error);
