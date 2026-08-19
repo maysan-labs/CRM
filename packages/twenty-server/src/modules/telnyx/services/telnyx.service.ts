@@ -31,16 +31,29 @@ export class TelnyxService {
       // eslint-disable-next-line @typescript-eslint/no-var-requires
       const telnyx = require('telnyx')(apiKey);
       
-      const response = await telnyx.telephonyCredentials.createToken(credentialId);
+      let activeCredentialId = credentialId;
+
+      // Intelligently resolve the Telephony Credential ID if the user provided a SIP Connection ID
+      try {
+        const credentialsList = await telnyx.telephonyCredentials.list({ filter: { connection_id: credentialId } });
+        if (credentialsList?.data && credentialsList.data.length > 0) {
+          activeCredentialId = credentialsList.data[0].id;
+          this.logger.log(`Resolved SIP Connection ID to Telephony Credential ID: ${activeCredentialId}`);
+        }
+      } catch (e) {
+         // Silently ignore: The ID might already be a valid Telephony Credential ID, or the API call failed.
+      }
+
+      const response = await telnyx.telephonyCredentials.createToken(activeCredentialId);
       // Ensure we extract the string token properly, as the exact return structure may vary
       let jwtToken = '';
       if (typeof response === 'string') {
           jwtToken = response;
-      } else if (response && response.data && typeof response.data === 'string') {
+      } else if (response?.data && typeof response.data === 'string') {
           jwtToken = response.data;
-      } else if (response && response.data && response.data.token) {
+      } else if (response?.data?.token) {
           jwtToken = response.data.token;
-      } else if (response && response.token) {
+      } else if (response?.token) {
           jwtToken = response.token;
       } else if (response) {
           jwtToken = response.toString();
