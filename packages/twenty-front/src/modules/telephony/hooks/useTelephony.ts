@@ -60,38 +60,44 @@ const getTwilioVoiceDeviceClass = async (): Promise<any> => {
   if ((window as any).Twilio?.Device) {
     return (window as any).Twilio.Device;
   }
-  try {
-    // @ts-ignore
-    const sdk = await import('@twilio/voice-sdk');
-    return sdk.Device || (sdk as any).default?.Device;
-  } catch {
-    return new Promise((resolve, reject) => {
-      const existingScript = document.getElementById('twilio-voice-sdk');
-      if (existingScript) {
-        existingScript.addEventListener('load', () => resolve((window as any).Twilio?.Device));
-        return;
-      }
-      const script = document.createElement('script');
-      script.id = 'twilio-voice-sdk';
-      script.src = 'https://sdk.twilio.com/js/voice/releases/2.10.1/twilio-voice.min.js';
-      script.async = true;
-      script.onload = () => resolve((window as any).Twilio?.Device);
-      script.onerror = (err) => reject(err);
-      document.head.appendChild(script);
-    });
-  }
+  return new Promise((resolve, reject) => {
+    const existingScript = document.getElementById('twilio-voice-sdk');
+    if (existingScript) {
+      existingScript.addEventListener('load', () => resolve((window as any).Twilio?.Device));
+      return;
+    }
+    const script = document.createElement('script');
+    script.id = 'twilio-voice-sdk';
+    script.src = 'https://sdk.twilio.com/js/voice/releases/2.10.1/twilio-voice.min.js';
+    script.async = true;
+    script.onload = () => resolve((window as any).Twilio?.Device);
+    script.onerror = (err) => reject(err);
+    document.head.appendChild(script);
+  });
 };
 
 // Helper to get Telnyx WebRTC Device class safely
 const getTelnyxVoiceDeviceClass = async (): Promise<any> => {
-  try {
-    // @ts-ignore
-    const sdk = await import('@telnyx/webrtc');
-    return sdk.TelnyxRTC || (sdk as any).default?.TelnyxRTC;
-  } catch (error) {
-    console.error('Failed to load @telnyx/webrtc', error);
-    throw error;
+  if ((window as any).TelnyxRTC || (window as any).Telnyx?.TelnyxRTC) {
+    return (window as any).TelnyxRTC || (window as any).Telnyx?.TelnyxRTC;
   }
+  return new Promise((resolve, reject) => {
+    const existingScript = document.getElementById('telnyx-webrtc-sdk');
+    if (existingScript) {
+      existingScript.addEventListener('load', () =>
+        resolve((window as any).TelnyxRTC || (window as any).Telnyx?.TelnyxRTC),
+      );
+      return;
+    }
+    const script = document.createElement('script');
+    script.id = 'telnyx-webrtc-sdk';
+    script.src = 'https://unpkg.com/@telnyx/webrtc@2.6.2/dist/telnyx-webrtc.umd.js';
+    script.async = true;
+    script.onload = () =>
+      resolve((window as any).TelnyxRTC || (window as any).Telnyx?.TelnyxRTC);
+    script.onerror = (err) => reject(err);
+    document.head.appendChild(script);
+  });
 };
 
 export const useTelephony = () => {
@@ -215,11 +221,13 @@ export const useTelephony = () => {
             }
             
             if (call.state === 'hangup' || call.state === 'destroy') {
+              console.error('Telnyx Call Hangup Reason:', call.cause || 'Unknown');
               activeCallRef.current = null;
               setState((prev: TelephonyState) => {
                 if (prev.callState === 'FAILED') return prev;
                 if (!isUserInitiatedHangupRef.current && prev.durationSeconds === 0) {
-                  return { ...prev, callState: 'FAILED', lastErrorMessage: 'Call Ended' };
+                  const errorMsg = call.cause ? `Call Ended (${call.cause})` : 'Call Ended';
+                  return { ...prev, callState: 'FAILED', lastErrorMessage: errorMsg };
                 }
                 return { ...prev, callState: prev.durationSeconds > 0 ? 'COMPLETED' : 'CANCELLED' };
               });

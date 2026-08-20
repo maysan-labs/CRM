@@ -3,6 +3,7 @@ import { useCommandMenuHotKeys } from '@/command-menu/hooks/useCommandMenuHotKey
 import { SidePanelForDesktop } from '@/side-panel/components/SidePanelForDesktop';
 import { useIsMobile } from '@/ui/utilities/responsive/hooks/useIsMobile';
 import { TwilioSoftphoneDrawer } from '@/telephony/components/TwilioSoftphoneDrawer';
+import { WhatsappDrawer } from '@/whatsapp/components/WhatsappDrawer';
 import { styled } from '@linaria/react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { useEffect, useState } from 'react';
@@ -139,6 +140,7 @@ export const MainAppLayoutWithSidePanel = () => {
       </StyledContent>
       {isMobile ? <CommandMenuForMobile /> : <SidePanelForDesktop />}
       <TwilioSoftphoneDrawer />
+      <WhatsappDrawer />
     </StyledRow>
   );
 };

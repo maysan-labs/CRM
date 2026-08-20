@@ -4,6 +4,7 @@ import React, { useMemo } from 'react';
 import { type FieldPhonesValue } from '@/object-record/record-field/ui/types/FieldMetadata';
 import { ExpandableList } from '@/ui/layout/expandable-list/components/ExpandableList';
 import { useTelephony } from '@/telephony/hooks/useTelephony';
+import { useWhatsapp } from '@/whatsapp/hooks/useWhatsapp';
 
 import { styled } from '@linaria/react';
 import { parsePhoneNumber } from 'libphonenumber-js';
@@ -22,11 +23,18 @@ type PhonesDisplayProps = {
 const StyledContainer = styled.div`
   align-items: center;
   display: flex;
-  gap: 4px;
+  gap: 6px;
   justify-content: flex-start;
   max-width: 100%;
   overflow: hidden;
   width: 100%;
+  flex-wrap: wrap;
+`;
+
+const StyledPhoneGroup = styled.div`
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
 `;
 
 const StyledPhoneButton = styled.button`
@@ -51,12 +59,34 @@ const StyledPhoneButton = styled.button`
   }
 `;
 
+const StyledWhatsappSmallButton = styled.button`
+  background: rgba(37, 211, 102, 0.1);
+  border: 1px solid rgba(37, 211, 102, 0.2);
+  border-radius: 6px;
+  color: #25d366;
+  cursor: pointer;
+  font-size: 11px;
+  padding: 3px 6px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s ease-in-out;
+  outline: none;
+
+  &:hover {
+    background: rgba(37, 211, 102, 0.22);
+    border-color: #25d366;
+    color: #ffffff;
+  }
+`;
+
 export const PhonesDisplay = ({
   value,
   isFocused,
   onPhoneNumberClick,
 }: PhonesDisplayProps) => {
   const { openDialer } = useTelephony();
+  const { openChat } = useWhatsapp();
 
   const phones = useMemo(
     () =>
@@ -108,6 +138,15 @@ export const PhonesDisplay = ({
     }
   };
 
+  const handleWhatsappClick = (
+    phoneNum: string,
+    event: React.MouseEvent<HTMLElement>,
+  ) => {
+    event.stopPropagation();
+    event.preventDefault();
+    openChat(phoneNum);
+  };
+
   return isFocused ? (
     <ExpandableList isChipCountDisplayed>
       {phones.map(({ number, callingCode }, index) => {
@@ -116,13 +155,22 @@ export const PhonesDisplay = ({
           parsePhoneNumberOrReturnInvalidValue(fullNumber);
         const label = parsedPhone ? parsedPhone.formatInternational() : invalidPhone;
         return (
-          <StyledPhoneButton
-            key={index}
-            type="button"
-            onClick={(event) => handlePhoneClick(fullNumber, event)}
-          >
-            📞 {label}
-          </StyledPhoneButton>
+          <StyledPhoneGroup key={index}>
+            <StyledPhoneButton
+              type="button"
+              onClick={(event) => handlePhoneClick(fullNumber, event)}
+              title="Call phone"
+            >
+              📞 {label}
+            </StyledPhoneButton>
+            <StyledWhatsappSmallButton
+              type="button"
+              onClick={(event) => handleWhatsappClick(fullNumber, event)}
+              title="Chat on WhatsApp"
+            >
+              💬
+            </StyledWhatsappSmallButton>
+          </StyledPhoneGroup>
         );
       })}
     </ExpandableList>
@@ -134,13 +182,22 @@ export const PhonesDisplay = ({
           parsePhoneNumberOrReturnInvalidValue(fullNumber);
         const label = parsedPhone ? parsedPhone.formatInternational() : invalidPhone;
         return (
-          <StyledPhoneButton
-            key={index}
-            type="button"
-            onClick={(event) => handlePhoneClick(fullNumber, event)}
-          >
-            📞 {label}
-          </StyledPhoneButton>
+          <StyledPhoneGroup key={index}>
+            <StyledPhoneButton
+              type="button"
+              onClick={(event) => handlePhoneClick(fullNumber, event)}
+              title="Call phone"
+            >
+              📞 {label}
+            </StyledPhoneButton>
+            <StyledWhatsappSmallButton
+              type="button"
+              onClick={(event) => handleWhatsappClick(fullNumber, event)}
+              title="Chat on WhatsApp"
+            >
+              💬
+            </StyledWhatsappSmallButton>
+          </StyledPhoneGroup>
         );
       })}
     </StyledContainer>

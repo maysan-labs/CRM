@@ -6,6 +6,7 @@ import { MessagingModule } from 'src/modules/messaging/messaging.module';
 import { OnboardingInviteSuggestionsModule } from 'src/modules/onboarding-invite-suggestions/onboarding-invite-suggestions.module';
 import { TwilioModule } from 'src/modules/twilio/twilio.module';
 import { TelnyxModule } from 'src/modules/telnyx/telnyx.module';
+import { WhatsappModule } from 'src/modules/whatsapp/whatsapp.module';
 import { WorkflowModule } from 'src/modules/workflow/workflow.module';
 import { WorkspaceMemberModule } from 'src/modules/workspace-member/workspace-member.module';
 
@@ -19,6 +20,7 @@ import { WorkspaceMemberModule } from 'src/modules/workspace-member/workspace-me
     WorkspaceMemberModule,
     TwilioModule,
     TelnyxModule,
+    WhatsappModule,
   ],
   providers: [],
   exports: [],
