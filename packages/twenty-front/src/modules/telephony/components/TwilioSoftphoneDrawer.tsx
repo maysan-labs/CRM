@@ -293,7 +293,6 @@ export const TwilioSoftphoneDrawer: React.FC = () => {
       </StyledHeader>
 
       <StyledBody>
-        {/*
         {callState === 'IDLE' && (
           <StyledProviderToggle>
             <StyledProviderButton 
@@ -310,7 +309,6 @@ export const TwilioSoftphoneDrawer: React.FC = () => {
             </StyledProviderButton>
           </StyledProviderToggle>
         )}
-        */}
 
         <StyledPhoneNumberInput
           value={callState !== 'IDLE' ? phoneNumber : inputNumber}
@@ -375,7 +373,7 @@ export const TwilioSoftphoneDrawer: React.FC = () => {
             style={{ backgroundColor: isCallActive ? '#ef4444' : '#22c55e' }}
             onClick={handleDialClick}
           >
-            {isCallActive ? 'End Call' : `Call`}
+            {isCallActive ? 'End Call' : `Call via ${activeProvider === 'telnyx' ? 'Telnyx' : 'Twilio'}`}
           </StyledCallButton>
         </StyledActionsRow>
       </StyledBody>

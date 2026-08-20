@@ -234,7 +234,6 @@ export const useTelephony = () => {
         });
       } else {
         // TWILIO
-        /*
         const DeviceClass = await getTwilioVoiceDeviceClass();
         if (!DeviceClass) throw new Error('Twilio Voice Device SDK could not be loaded');
 
@@ -277,7 +276,6 @@ export const useTelephony = () => {
           setState((prev: TelephonyState) => ({ ...prev, callState: 'BUSY' }));
           setTimeout(() => setState((prev: TelephonyState) => ({ ...prev, callState: 'IDLE', isDrawerOpen: false, durationSeconds: 0 })), 3000);
         });
-        */
       }
     } catch (error: any) {
       console.error('WebRTC Error:', error);
