@@ -51,33 +51,38 @@ export class WhatsappService implements OnModuleInit {
       : serverUrl;
     const webhookUrl = `${normalizedServerUrl}/whatsapp/webhook`;
 
-    try {
-      await axios.post(
-        `${baseUrl}/webhook/set/${instance}`,
-        {
-          webhook: {
-            enabled: true,
-            url: webhookUrl,
-            byEvents: false,
-            events: [
-              'MESSAGES_UPSERT',
-              'MESSAGES_UPDATE',
-              'CONNECTION_UPDATE',
-            ],
+    const candidates = [
+      `${baseUrl}/webhook/set/${instance}`,
+      `${baseUrl}/webhook/set/${instance.toLowerCase()}`,
+      `${baseUrl}/webhook/${instance}`,
+    ];
+
+    for (const url of candidates) {
+      try {
+        await axios.post(
+          url,
+          {
+            webhook: {
+              enabled: true,
+              url: webhookUrl,
+              byEvents: false,
+              events: [
+                'MESSAGES_UPSERT',
+                'MESSAGES_UPDATE',
+                'CONNECTION_UPDATE',
+              ],
+            },
           },
-        },
-        {
-          headers: this.getHeaders(),
-          timeout: 8000,
-        },
-      );
-      this.logger.log(
-        `✅ Evolution Go webhook auto-registered: ${webhookUrl}`,
-      );
-    } catch (e: any) {
-      this.logger.warn(
-        `Could not auto-register webhook with Evolution Go (will retry on next boot): ${e?.message}`,
-      );
+          {
+            headers: this.getHeaders(),
+            timeout: 6000,
+          },
+        );
+        this.logger.log(`✅ Evolution Go webhook registered at: ${url} -> ${webhookUrl}`);
+        return;
+      } catch (e: any) {
+        // continue to next candidate
+      }
     }
   }
 
@@ -110,6 +115,8 @@ export class WhatsappService implements OnModuleInit {
     const apiKey = this.getApiKey();
     return {
       apikey: apiKey,
+      apiKey: apiKey,
+      Authorization: `Bearer ${apiKey}`,
       'Content-Type': 'application/json',
     };
   }
@@ -122,7 +129,7 @@ export class WhatsappService implements OnModuleInit {
   }
 
   /**
-   * Fetch current connection state and QR code from Evolution Go.
+   * Fetch current connection state and QR code from Evolution Go with multi-route fallback.
    */
   async getInstanceStatus(instanceName?: string): Promise<WhatsappInstanceStatus> {
     const instance = instanceName || this.getDefaultInstance();
@@ -131,7 +138,7 @@ export class WhatsappService implements OnModuleInit {
 
     if (!baseUrl || !apiKey) {
       this.logger.warn(
-        'Evolution Go credentials (EVOLUTION_GO_BASE_URL / EVOLUTION_GO_API_KEY) missing in backend container. Returning mock status.',
+        'Evolution Go credentials missing. Returning mock status.',
       );
       return {
         instanceName: instance,
@@ -144,88 +151,108 @@ export class WhatsappService implements OnModuleInit {
     }
 
     try {
-      // 1. Check connection state (try exact instance name, then lowercase if 404)
-      let stateRes;
-      let activeInstanceName = instance;
+      // 1. Try different status routes in Evolution Go
+      const statusEndpoints = [
+        `${baseUrl}/instance/${instance}/status`,
+        `${baseUrl}/instance/${instance.toLowerCase()}/status`,
+        `${baseUrl}/instance/connectionState/${instance}`,
+        `${baseUrl}/instance/connectionState/${instance.toLowerCase()}`,
+        `${baseUrl}/instance/status/${instance}`,
+      ];
 
-      try {
-        stateRes = await axios.get(`${baseUrl}/instance/connectionState/${instance}`, {
-          headers: this.getHeaders(),
-          timeout: 8000,
-        });
-      } catch (err: any) {
-        if (err.response?.status === 404) {
-          try {
-            // Try lowercase instance name fallback
-            stateRes = await axios.get(
-              `${baseUrl}/instance/connectionState/${instance.toLowerCase()}`,
-              {
-                headers: this.getHeaders(),
-                timeout: 8000,
-              },
-            );
-            activeInstanceName = instance.toLowerCase();
-          } catch (err2: any) {
-            if (err2.response?.status === 404) {
-              this.logger.log(`Instance ${instance} not found. Creating instance...`);
-              await this.createInstance(instance);
-            } else {
-              throw err2;
-            }
+      let stateRes: any = null;
+      for (const endpoint of statusEndpoints) {
+        try {
+          const res = await axios.get(endpoint, {
+            headers: this.getHeaders(),
+            timeout: 5000,
+          });
+          if (res?.data) {
+            stateRes = res;
+            break;
           }
-        } else {
-          throw err;
+        } catch {
+          // ignore and try next endpoint
         }
       }
 
       const connectionState =
         stateRes?.data?.instance?.state ||
         stateRes?.data?.state ||
-        stateRes?.data?.status;
+        stateRes?.data?.status ||
+        stateRes?.data?.connectionStatus;
 
-      if (connectionState === 'open' || connectionState === 'connected') {
+      if (connectionState === 'open' || connectionState === 'connected' || connectionState === 'CONNECTED') {
         const phone =
           stateRes?.data?.instance?.ownerJid?.split('@')[0] ||
-          stateRes?.data?.owner?.split('@')[0];
+          stateRes?.data?.owner?.split('@')[0] ||
+          stateRes?.data?.phone;
         return {
-          instanceName: activeInstanceName,
+          instanceName: instance,
           status: 'CONNECTED',
           phoneConnected: phone ? `+${phone}` : undefined,
           isMock: false,
         };
       }
 
-      // 2. If not connected, fetch QR code / connect payload
-      let connectRes;
-      try {
-        connectRes = await axios.get(`${baseUrl}/instance/connect/${activeInstanceName}`, {
-          headers: this.getHeaders(),
-          timeout: 8000,
-        });
-      } catch (e: any) {
-        if (e.response?.status === 404) {
-          // Try POST /instance/connect
+      // 2. Try different QR code routes in Evolution Go
+      const qrEndpoints = [
+        `${baseUrl}/instance/${instance}/qrcode`,
+        `${baseUrl}/instance/${instance.toLowerCase()}/qrcode`,
+        `${baseUrl}/instance/connect/${instance}`,
+        `${baseUrl}/instance/connect/${instance.toLowerCase()}`,
+        `${baseUrl}/instance/qrcode/${instance}`,
+      ];
+
+      let connectRes: any = null;
+      for (const endpoint of qrEndpoints) {
+        try {
+          const res = await axios.get(endpoint, {
+            headers: this.getHeaders(),
+            timeout: 5000,
+          });
+          if (res?.data) {
+            connectRes = res;
+            break;
+          }
+        } catch {
+          // try next
+        }
+      }
+
+      // If GET failed, try POST /instance/connect
+      if (!connectRes) {
+        try {
           connectRes = await axios.post(
-            `${baseUrl}/instance/connect/${activeInstanceName}`,
+            `${baseUrl}/instance/connect/${instance}`,
             {},
-            { headers: this.getHeaders(), timeout: 8000 },
+            { headers: this.getHeaders(), timeout: 5000 },
           );
-        } else {
-          throw e;
+        } catch {
+          // ignore
         }
       }
 
       const qrCode =
         connectRes?.data?.base64 ||
         connectRes?.data?.qrcode?.base64 ||
+        connectRes?.data?.qrcode ||
         connectRes?.data?.code ||
         connectRes?.data?.pairingCode;
 
+      if (qrCode) {
+        return {
+          instanceName: instance,
+          status: 'QR_READY',
+          qrcode: qrCode,
+          pairingCode: connectRes?.data?.pairingCode,
+          isMock: false,
+        };
+      }
+
       return {
-        instanceName: activeInstanceName,
-        status: qrCode ? 'QR_READY' : 'CONNECTING',
-        qrcode: qrCode,
-        pairingCode: connectRes?.data?.pairingCode,
+        instanceName: instance,
+        status: 'CONNECTING',
         isMock: false,
       };
     } catch (error: any) {
@@ -262,13 +289,13 @@ export class WhatsappService implements OnModuleInit {
       this.logger.log(`Instance ${instanceName} created successfully in Evolution Go.`);
       return res.data;
     } catch (error: any) {
-      this.logger.warn(`Could not create instance ${instanceName} (may already exist): ${error?.message}`);
+      this.logger.warn(`Could not create instance ${instanceName}: ${error?.message}`);
       return null;
     }
   }
 
   /**
-   * Send outbound text message to a destination phone number.
+   * Send outbound text message with multi-endpoint routing.
    */
   async sendTextMessage(dto: SendWhatsappMessageDto): Promise<{
     success: boolean;
@@ -286,9 +313,7 @@ export class WhatsappService implements OnModuleInit {
     }
 
     if (!baseUrl || !apiKey) {
-      this.logger.warn(
-        `Evolution Go credentials not configured. Mock sending WhatsApp text to ${cleanNumber}: "${dto.text}"`,
-      );
+      this.logger.warn(`Evolution Go credentials not configured. Mocking send to ${cleanNumber}`);
       return {
         success: true,
         messageId: `mock_msg_${Date.now()}`,
@@ -296,70 +321,84 @@ export class WhatsappService implements OnModuleInit {
       };
     }
 
-    try {
-      let res;
+    // Try all valid Evolution Go / Evolution API sendText endpoint patterns
+    const sendAttempts = [
+      {
+        url: `${baseUrl}/send/text`,
+        body: { instance, number: cleanNumber, text: dto.text },
+      },
+      {
+        url: `${baseUrl}/send/text`,
+        body: { number: cleanNumber, text: dto.text },
+      },
+      {
+        url: `${baseUrl}/message/sendText/${instance}`,
+        body: { number: cleanNumber, text: dto.text, delay: 1200, linkPreview: true },
+      },
+      {
+        url: `${baseUrl}/send/text/${instance}`,
+        body: { number: cleanNumber, text: dto.text },
+      },
+      {
+        url: `${baseUrl}/message/sendText/${instance.toLowerCase()}`,
+        body: { number: cleanNumber, text: dto.text, delay: 1200, linkPreview: true },
+      },
+      {
+        url: `${baseUrl}/message/sendText`,
+        body: { instance, number: cleanNumber, text: dto.text },
+      },
+    ];
+
+    let lastError: any = null;
+
+    for (const attempt of sendAttempts) {
       try {
-        res = await axios.post(
-          `${baseUrl}/message/sendText/${instance}`,
-          {
-            number: cleanNumber,
-            text: dto.text,
-            delay: 1200,
-            linkPreview: true,
-          },
-          {
-            headers: this.getHeaders(),
-            timeout: 12000,
-          },
-        );
-      } catch (err: any) {
-        if (err.response?.status === 404) {
-          // Retry with lowercase instance name
-          res = await axios.post(
-            `${baseUrl}/message/sendText/${instance.toLowerCase()}`,
-            {
-              number: cleanNumber,
-              text: dto.text,
-              delay: 1200,
-              linkPreview: true,
-            },
-            {
-              headers: this.getHeaders(),
-              timeout: 12000,
-            },
+        const res = await axios.post(attempt.url, attempt.body, {
+          headers: this.getHeaders(),
+          timeout: 12000,
+        });
+
+        if (res.status >= 200 && res.status < 300) {
+          const messageId =
+            res.data?.key?.id ||
+            res.data?.messageId ||
+            res.data?.id ||
+            `msg_${Date.now()}`;
+
+          this.logger.log(
+            `WhatsApp message sent successfully via ${attempt.url} to ${cleanNumber} (MsgID: ${messageId})`,
           );
+
+          return {
+            success: true,
+            messageId,
+            isMock: false,
+          };
+        }
+      } catch (err: any) {
+        lastError = err;
+        // if 404 or method not allowed, continue to next candidate route
+        if (err.response?.status === 404 || err.response?.status === 405) {
+          continue;
         } else {
-          throw err;
+          // If auth or bad request error, break early
+          break;
         }
       }
-
-      const messageId =
-        res.data?.key?.id ||
-        res.data?.messageId ||
-        res.data?.id ||
-        `msg_${Date.now()}`;
-
-      this.logger.log(
-        `WhatsApp text message successfully sent to ${cleanNumber} (MsgID: ${messageId})`,
-      );
-
-      return {
-        success: true,
-        messageId,
-        isMock: false,
-      };
-    } catch (error: any) {
-      const errMsg =
-        error?.response?.data?.response?.message ||
-        error?.response?.data?.message ||
-        error?.message ||
-        'Failed to send WhatsApp message';
-      this.logger.error(`Failed to send WhatsApp message to ${cleanNumber}: ${errMsg}`, error?.stack);
-      return {
-        success: false,
-        error: errMsg,
-      };
     }
+
+    const errMsg =
+      lastError?.response?.data?.response?.message ||
+      lastError?.response?.data?.message ||
+      lastError?.message ||
+      'Failed to send WhatsApp message';
+
+    this.logger.error(`Failed to send WhatsApp message to ${cleanNumber}: ${errMsg}`);
+
+    return {
+      success: false,
+      error: errMsg,
+    };
   }
 
   /**
@@ -390,35 +429,43 @@ export class WhatsappService implements OnModuleInit {
       };
     }
 
-    try {
-      const url = `${baseUrl}/message/sendMedia/${instance}`;
-      const res = await axios.post(
-        url,
-        {
+    const mediaAttempts = [
+      {
+        url: `${baseUrl}/send/media`,
+        body: { instance, number: cleanNumber, media: dto.mediaUrl, caption: dto.caption || '' },
+      },
+      {
+        url: `${baseUrl}/message/sendMedia/${instance}`,
+        body: {
           number: cleanNumber,
           media: dto.mediaUrl,
           mediatype: dto.mediaType || 'document',
           caption: dto.caption || '',
           fileName: dto.fileName || 'file',
         },
-        {
+      },
+    ];
+
+    for (const attempt of mediaAttempts) {
+      try {
+        const res = await axios.post(attempt.url, attempt.body, {
           headers: this.getHeaders(),
           timeout: 20000,
-        },
-      );
+        });
 
-      return {
-        success: true,
-        messageId: res.data?.key?.id || res.data?.id,
-      };
-    } catch (error: any) {
-      const errMsg = error?.response?.data?.message || error?.message;
-      this.logger.error(`Failed to send WhatsApp media to ${cleanNumber}: ${errMsg}`);
-      return {
-        success: false,
-        error: errMsg,
-      };
+        return {
+          success: true,
+          messageId: res.data?.key?.id || res.data?.id,
+        };
+      } catch {
+        // continue
+      }
     }
+
+    return {
+      success: false,
+      error: 'Failed to send WhatsApp media',
+    };
   }
 
   /**
