@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, type OnModuleInit } from '@nestjs/common';
 import axios from 'axios';
 
 export interface WhatsappInstanceStatus {
@@ -27,14 +27,64 @@ export interface SendWhatsappMediaDto {
 }
 
 @Injectable()
-export class WhatsappService {
+export class WhatsappService implements OnModuleInit {
   private readonly logger = new Logger(WhatsappService.name);
+
+  async onModuleInit() {
+    // Automatically register the webhook URL with Evolution Go on startup
+    await this.autoRegisterWebhook();
+  }
+
+  /**
+   * Auto-registers the CRM webhook URL in Evolution Go.
+   */
+  async autoRegisterWebhook(): Promise<void> {
+    const baseUrl = this.getBaseUrl();
+    const apiKey = this.getApiKey();
+    const instance = this.getDefaultInstance();
+    const serverUrl = process.env.SERVER_URL?.trim();
+
+    if (!baseUrl || !apiKey || !serverUrl) return;
+
+    const normalizedServerUrl = serverUrl.endsWith('/')
+      ? serverUrl.slice(0, -1)
+      : serverUrl;
+    const webhookUrl = `${normalizedServerUrl}/whatsapp/webhook`;
+
+    try {
+      await axios.post(
+        `${baseUrl}/webhook/set/${instance}`,
+        {
+          webhook: {
+            enabled: true,
+            url: webhookUrl,
+            byEvents: false,
+            events: [
+              'MESSAGES_UPSERT',
+              'MESSAGES_UPDATE',
+              'CONNECTION_UPDATE',
+            ],
+          },
+        },
+        {
+          headers: this.getHeaders(),
+          timeout: 8000,
+        },
+      );
+      this.logger.log(
+        `✅ Evolution Go webhook auto-registered: ${webhookUrl}`,
+      );
+    } catch (e: any) {
+      this.logger.warn(
+        `Could not auto-register webhook with Evolution Go (will retry on next boot): ${e?.message}`,
+      );
+    }
+  }
 
   private getBaseUrl(): string {
     const rawUrl =
       process.env.EVOLUTION_GO_BASE_URL?.trim() ||
       process.env.EVOLUTION_BASE_URL?.trim() ||
-      process.env.SERVER_URL?.trim() ||
       '';
     return rawUrl.endsWith('/') ? rawUrl.slice(0, -1) : rawUrl;
   }
@@ -52,7 +102,7 @@ export class WhatsappService {
     return (
       process.env.EVOLUTION_GO_INSTANCE_NAME?.trim() ||
       process.env.CLIENT_NAME?.trim() ||
-      'crm_main_instance'
+      'Maysanlabs'
     );
   }
 
@@ -89,24 +139,40 @@ export class WhatsappService {
         qrcode:
           'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
         isMock: true,
-        message: 'Mock Mode: Configure EVOLUTION_GO_BASE_URL and EVOLUTION_GO_API_KEY in Dokploy env.',
+        message: 'Mock Mode: Configure EVOLUTION_GO_BASE_URL and EVOLUTION_GO_API_KEY in .env.',
       };
     }
 
     try {
-      // 1. Try to check connection state
-      const stateUrl = `${baseUrl}/instance/connectionState/${instance}`;
+      // 1. Check connection state (try exact instance name, then lowercase if 404)
       let stateRes;
+      let activeInstanceName = instance;
+
       try {
-        stateRes = await axios.get(stateUrl, {
+        stateRes = await axios.get(`${baseUrl}/instance/connectionState/${instance}`, {
           headers: this.getHeaders(),
           timeout: 8000,
         });
       } catch (err: any) {
         if (err.response?.status === 404) {
-          // Instance does not exist yet -> create it
-          this.logger.log(`Instance ${instance} not found. Creating instance...`);
-          await this.createInstance(instance);
+          try {
+            // Try lowercase instance name fallback
+            stateRes = await axios.get(
+              `${baseUrl}/instance/connectionState/${instance.toLowerCase()}`,
+              {
+                headers: this.getHeaders(),
+                timeout: 8000,
+              },
+            );
+            activeInstanceName = instance.toLowerCase();
+          } catch (err2: any) {
+            if (err2.response?.status === 404) {
+              this.logger.log(`Instance ${instance} not found. Creating instance...`);
+              await this.createInstance(instance);
+            } else {
+              throw err2;
+            }
+          }
         } else {
           throw err;
         }
@@ -122,7 +188,7 @@ export class WhatsappService {
           stateRes?.data?.instance?.ownerJid?.split('@')[0] ||
           stateRes?.data?.owner?.split('@')[0];
         return {
-          instanceName: instance,
+          instanceName: activeInstanceName,
           status: 'CONNECTED',
           phoneConnected: phone ? `+${phone}` : undefined,
           isMock: false,
@@ -130,23 +196,36 @@ export class WhatsappService {
       }
 
       // 2. If not connected, fetch QR code / connect payload
-      const connectUrl = `${baseUrl}/instance/connect/${instance}`;
-      const connectRes = await axios.get(connectUrl, {
-        headers: this.getHeaders(),
-        timeout: 8000,
-      });
+      let connectRes;
+      try {
+        connectRes = await axios.get(`${baseUrl}/instance/connect/${activeInstanceName}`, {
+          headers: this.getHeaders(),
+          timeout: 8000,
+        });
+      } catch (e: any) {
+        if (e.response?.status === 404) {
+          // Try POST /instance/connect
+          connectRes = await axios.post(
+            `${baseUrl}/instance/connect/${activeInstanceName}`,
+            {},
+            { headers: this.getHeaders(), timeout: 8000 },
+          );
+        } else {
+          throw e;
+        }
+      }
 
       const qrCode =
-        connectRes.data?.base64 ||
-        connectRes.data?.qrcode?.base64 ||
-        connectRes.data?.code ||
-        connectRes.data?.pairingCode;
+        connectRes?.data?.base64 ||
+        connectRes?.data?.qrcode?.base64 ||
+        connectRes?.data?.code ||
+        connectRes?.data?.pairingCode;
 
       return {
-        instanceName: instance,
+        instanceName: activeInstanceName,
         status: qrCode ? 'QR_READY' : 'CONNECTING',
         qrcode: qrCode,
-        pairingCode: connectRes.data?.pairingCode,
+        pairingCode: connectRes?.data?.pairingCode,
         isMock: false,
       };
     } catch (error: any) {
@@ -218,20 +297,41 @@ export class WhatsappService {
     }
 
     try {
-      const url = `${baseUrl}/message/sendText/${instance}`;
-      const res = await axios.post(
-        url,
-        {
-          number: cleanNumber,
-          text: dto.text,
-          delay: 1200,
-          linkPreview: true,
-        },
-        {
-          headers: this.getHeaders(),
-          timeout: 12000,
-        },
-      );
+      let res;
+      try {
+        res = await axios.post(
+          `${baseUrl}/message/sendText/${instance}`,
+          {
+            number: cleanNumber,
+            text: dto.text,
+            delay: 1200,
+            linkPreview: true,
+          },
+          {
+            headers: this.getHeaders(),
+            timeout: 12000,
+          },
+        );
+      } catch (err: any) {
+        if (err.response?.status === 404) {
+          // Retry with lowercase instance name
+          res = await axios.post(
+            `${baseUrl}/message/sendText/${instance.toLowerCase()}`,
+            {
+              number: cleanNumber,
+              text: dto.text,
+              delay: 1200,
+              linkPreview: true,
+            },
+            {
+              headers: this.getHeaders(),
+              timeout: 12000,
+            },
+          );
+        } else {
+          throw err;
+        }
+      }
 
       const messageId =
         res.data?.key?.id ||

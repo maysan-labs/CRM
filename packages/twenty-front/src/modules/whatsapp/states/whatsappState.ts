@@ -23,7 +23,7 @@ export interface WhatsappState {
   connectionStatus: WhatsappConnectionStatus;
   qrCode?: string;
   phoneConnected?: string;
-  messages: WhatsappChatMessage[];
+  messagesByPhone: Record<string, WhatsappChatMessage[]>;
   isSending: boolean;
   isMockMode: boolean;
   errorMessage?: string;
@@ -38,7 +38,7 @@ export const whatsappState = createAtomState<WhatsappState>({
     connectionStatus: 'LOADING',
     qrCode: undefined,
     phoneConnected: undefined,
-    messages: [],
+    messagesByPhone: {},
     isSending: false,
     isMockMode: false,
     errorMessage: undefined,
