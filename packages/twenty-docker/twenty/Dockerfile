@@ -43,11 +43,13 @@ FROM server-deps AS twenty-server-build
 
 COPY ./packages/twenty-emails /app/packages/twenty-emails
 COPY ./packages/twenty-shared /app/packages/twenty-shared
+COPY ./packages/twenty-ui /app/packages/twenty-ui
+COPY ./packages/twenty-sdk /app/packages/twenty-sdk
 COPY ./packages/twenty-client-sdk /app/packages/twenty-client-sdk
 COPY ./packages/twenty-server /app/packages/twenty-server
 
-RUN npx nx run twenty-server:lingui:compile && \
-    npx nx run twenty-emails:lingui:compile
+RUN npx nx run twenty-server:lingui:compile --parallel=1 && \
+    npx nx run twenty-emails:lingui:compile --parallel=1
 
 RUN npx nx run twenty-server:build
 
@@ -67,7 +69,12 @@ COPY ./packages/twenty-ui /app/packages/twenty-ui
 COPY ./packages/twenty-shared /app/packages/twenty-shared
 COPY ./packages/twenty-sdk /app/packages/twenty-sdk
 COPY ./packages/twenty-client-sdk /app/packages/twenty-client-sdk
-RUN npx nx run twenty-front:lingui:compile
+
+RUN npx nx run twenty-shared:build && \
+    npx nx run twenty-ui:build && \
+    npx nx run twenty-sdk:build && \
+    npx nx run twenty-front-component-renderer:build && \
+    npx nx run twenty-front:lingui:compile --parallel=1
 # To skip the memory-intensive frontend build, pre-build on the host:
 #   npx nx build twenty-front
 # The check below will use packages/twenty-front/build/ if it already exists.
