@@ -116,7 +116,7 @@ export class WhatsappService implements OnModuleInit {
     return {
       apikey: apiKey,
       apiKey: apiKey,
-      Authorization: `Bearer ${apiKey}`,
+      GLOBAL_API_KEY: apiKey,
       'Content-Type': 'application/json',
     };
   }
