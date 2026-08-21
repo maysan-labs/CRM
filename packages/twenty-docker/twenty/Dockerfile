@@ -63,6 +63,9 @@ RUN yarn workspaces focus --production twenty-emails twenty-shared twenty-client
 
 FROM front-deps AS twenty-front-build
 
+# Enforce sequential builds: wait for server build to finish completely before compiling frontend
+COPY --from=twenty-server-build /app/packages/twenty-server/dist/main.js /tmp/server-built.js
+
 COPY ./packages/twenty-front /app/packages/twenty-front
 COPY ./packages/twenty-front-component-renderer /app/packages/twenty-front-component-renderer
 COPY ./packages/twenty-ui /app/packages/twenty-ui
