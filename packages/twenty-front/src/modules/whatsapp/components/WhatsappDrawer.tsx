@@ -352,7 +352,7 @@ export const WhatsappDrawer: React.FC = () => {
       </StyledHeader>
 
       <StyledBody>
-        {connectionStatus === 'QR_READY' && qrCode ? (
+        {connectionStatus !== 'CONNECTED' && qrCode ? (
           <StyledQRContainer>
             <span style={{ fontSize: '13px', fontWeight: 600, color: '#f3f4f6' }}>
               Pair WhatsApp to CRM
@@ -380,6 +380,31 @@ export const WhatsappDrawer: React.FC = () => {
               🔄 Refresh QR Code
             </StyledIconButton>
           </StyledQRContainer>
+        ) : connectionStatus !== 'CONNECTED' ? (
+          <StyledEmptyState>
+            <div style={{ fontSize: '28px', marginBottom: '8px' }}>📲</div>
+            <div style={{ fontSize: '13px', fontWeight: 600, color: '#d1d5db' }}>
+              WhatsApp Not Linked
+            </div>
+            <div style={{ fontSize: '11px', marginTop: '4px', color: '#9ca3af', maxWidth: '280px', textAlign: 'center' }}>
+              Click below to generate a QR code and pair your WhatsApp phone number.
+            </div>
+            <StyledIconButton
+              onClick={fetchStatus}
+              style={{
+                marginTop: '14px',
+                background: '#22c55e',
+                color: '#ffffff',
+                padding: '8px 18px',
+                borderRadius: '6px',
+                fontSize: '12px',
+                fontWeight: 600,
+                cursor: 'pointer',
+              }}
+            >
+              🔄 Generate QR Code
+            </StyledIconButton>
+          </StyledEmptyState>
         ) : (
           <>
             <StyledMessagesContainer>

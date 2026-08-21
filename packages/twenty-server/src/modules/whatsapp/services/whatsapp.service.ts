@@ -233,12 +233,22 @@ export class WhatsappService implements OnModuleInit {
         }
       }
 
-      const qrCode =
+      let qrCode =
         connectRes?.data?.base64 ||
         connectRes?.data?.qrcode?.base64 ||
         connectRes?.data?.qrcode ||
         connectRes?.data?.code ||
         connectRes?.data?.pairingCode;
+
+      if (!qrCode) {
+        // Auto-provision or re-trigger instance QR code in Evolution API
+        const createRes = await this.createInstance(instance);
+        qrCode =
+          createRes?.qrcode?.base64 ||
+          createRes?.base64 ||
+          createRes?.qrcode ||
+          createRes?.hash?.qrcode?.base64;
+      }
 
       if (qrCode) {
         return {
