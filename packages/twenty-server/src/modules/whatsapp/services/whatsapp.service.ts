@@ -9,6 +9,7 @@ export interface WhatsappInstanceStatus {
   phoneConnected?: string;
   isMock?: boolean;
   message?: string;
+  debug?: any;
 }
 
 export interface SendWhatsappMessageDto {
@@ -117,6 +118,7 @@ export class WhatsappService implements OnModuleInit {
       apikey: apiKey,
       apiKey: apiKey,
       GLOBAL_API_KEY: apiKey,
+      Authorization: `Bearer ${apiKey}`,
       'Content-Type': 'application/json',
     };
   }
@@ -150,6 +152,13 @@ export class WhatsappService implements OnModuleInit {
       };
     }
 
+    const debugInfo: Record<string, any> = {
+      baseUrl,
+      instance,
+      hasApiKey: Boolean(apiKey),
+      responses: {},
+    };
+
     try {
       // 1. First, try fetchInstances to discover all instances on the Evolution API server
       try {
@@ -157,6 +166,8 @@ export class WhatsappService implements OnModuleInit {
           headers: this.getHeaders(),
           timeout: 5000,
         });
+
+        debugInfo.responses['fetchInstances'] = fetchRes?.data;
 
         const instanceList = Array.isArray(fetchRes?.data)
           ? fetchRes.data
@@ -202,8 +213,12 @@ export class WhatsappService implements OnModuleInit {
             };
           }
         }
-      } catch {
-        // Fall through to individual endpoints
+      } catch (err: any) {
+        debugInfo.responses['fetchInstances_error'] = {
+          message: err?.message,
+          status: err?.response?.status,
+          data: err?.response?.data,
+        };
       }
 
       // 2. Try individual instance status endpoints in Evolution Go
@@ -225,10 +240,14 @@ export class WhatsappService implements OnModuleInit {
           });
           if (res?.data) {
             stateRes = res;
+            debugInfo.responses[endpoint] = res.data;
             break;
           }
-        } catch {
-          // ignore and try next endpoint
+        } catch (err: any) {
+          debugInfo.responses[endpoint] = {
+            status: err?.response?.status,
+            data: err?.response?.data,
+          };
         }
       }
 
@@ -276,10 +295,14 @@ export class WhatsappService implements OnModuleInit {
           });
           if (res?.data) {
             connectRes = res;
+            debugInfo.responses[endpoint] = res.data;
             break;
           }
-        } catch {
-          // try next
+        } catch (err: any) {
+          debugInfo.responses[endpoint] = {
+            status: err?.response?.status,
+            data: err?.response?.data,
+          };
         }
       }
 
@@ -291,8 +314,14 @@ export class WhatsappService implements OnModuleInit {
             {},
             { headers: this.getHeaders(), timeout: 5000 },
           );
-        } catch {
-          // ignore
+          if (connectRes?.data) {
+            debugInfo.responses[`POST_${baseUrl}/instance/connect/${instance}`] = connectRes.data;
+          }
+        } catch (err: any) {
+          debugInfo.responses[`POST_${baseUrl}/instance/connect/${instance}`] = {
+            status: err?.response?.status,
+            data: err?.response?.data,
+          };
         }
       }
 
@@ -306,6 +335,9 @@ export class WhatsappService implements OnModuleInit {
       if (!qrCode) {
         // Auto-provision or re-trigger instance QR code in Evolution API
         const createRes = await this.createInstance(instance);
+        if (createRes) {
+          debugInfo.responses['createInstance'] = createRes;
+        }
         qrCode =
           createRes?.qrcode?.base64 ||
           createRes?.base64 ||
@@ -320,6 +352,7 @@ export class WhatsappService implements OnModuleInit {
           qrcode: qrCode,
           pairingCode: connectRes?.data?.pairingCode,
           isMock: false,
+          debug: debugInfo,
         };
       }
 
@@ -327,6 +360,7 @@ export class WhatsappService implements OnModuleInit {
         instanceName: instance,
         status: 'CONNECTING',
         isMock: false,
+        debug: debugInfo,
       };
     } catch (error: any) {
       this.logger.error(`Error fetching Evolution Go status for instance ${instance}:`, error?.message);
@@ -335,6 +369,7 @@ export class WhatsappService implements OnModuleInit {
         status: 'ERROR',
         message: error?.response?.data?.message || error?.message || 'Failed to connect to Evolution Go',
         isMock: false,
+        debug: debugInfo,
       };
     }
   }
