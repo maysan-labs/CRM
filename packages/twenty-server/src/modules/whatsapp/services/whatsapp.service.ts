@@ -151,13 +151,69 @@ export class WhatsappService implements OnModuleInit {
     }
 
     try {
-      // 1. Try different status routes in Evolution Go
+      // 1. First, try fetchInstances to discover all instances on the Evolution API server
+      try {
+        const fetchRes = await axios.get(`${baseUrl}/instance/fetchInstances`, {
+          headers: this.getHeaders(),
+          timeout: 5000,
+        });
+
+        const instanceList = Array.isArray(fetchRes?.data)
+          ? fetchRes.data
+          : Array.isArray(fetchRes?.data?.instances)
+            ? fetchRes.data.instances
+            : [];
+
+        const matchingInst = instanceList.find((item: any) => {
+          const name =
+            item?.instanceName ||
+            item?.name ||
+            item?.instance?.instanceName ||
+            item?.instance?.name ||
+            '';
+          return name.toLowerCase() === instance.toLowerCase();
+        });
+
+        if (matchingInst) {
+          const instObj = matchingInst.instance || matchingInst;
+          const state =
+            instObj?.state ||
+            instObj?.status ||
+            instObj?.connectionStatus ||
+            instObj?.connection_status ||
+            '';
+
+          if (
+            state === 'open' ||
+            state === 'connected' ||
+            state === 'CONNECTED' ||
+            state === 'online'
+          ) {
+            const phone =
+              instObj?.ownerJid?.split('@')[0] ||
+              instObj?.owner?.split('@')[0] ||
+              instObj?.phone ||
+              instObj?.number;
+            return {
+              instanceName: instance,
+              status: 'CONNECTED',
+              phoneConnected: phone ? `+${phone}` : undefined,
+              isMock: false,
+            };
+          }
+        }
+      } catch {
+        // Fall through to individual endpoints
+      }
+
+      // 2. Try individual instance status endpoints in Evolution Go
       const statusEndpoints = [
         `${baseUrl}/instance/${instance}/status`,
         `${baseUrl}/instance/${instance.toLowerCase()}/status`,
         `${baseUrl}/instance/connectionState/${instance}`,
         `${baseUrl}/instance/connectionState/${instance.toLowerCase()}`,
         `${baseUrl}/instance/status/${instance}`,
+        `${baseUrl}/instance/info/${instance}`,
       ];
 
       let stateRes: any = null;
@@ -180,13 +236,20 @@ export class WhatsappService implements OnModuleInit {
         stateRes?.data?.instance?.state ||
         stateRes?.data?.state ||
         stateRes?.data?.status ||
-        stateRes?.data?.connectionStatus;
+        stateRes?.data?.connectionStatus ||
+        stateRes?.data?.connection_status;
 
-      if (connectionState === 'open' || connectionState === 'connected' || connectionState === 'CONNECTED') {
+      if (
+        connectionState === 'open' ||
+        connectionState === 'connected' ||
+        connectionState === 'CONNECTED' ||
+        connectionState === 'online'
+      ) {
         const phone =
           stateRes?.data?.instance?.ownerJid?.split('@')[0] ||
           stateRes?.data?.owner?.split('@')[0] ||
-          stateRes?.data?.phone;
+          stateRes?.data?.phone ||
+          stateRes?.data?.number;
         return {
           instanceName: instance,
           status: 'CONNECTED',
@@ -195,7 +258,7 @@ export class WhatsappService implements OnModuleInit {
         };
       }
 
-      // 2. Try different QR code routes in Evolution Go
+      // 3. Try different QR code routes in Evolution Go
       const qrEndpoints = [
         `${baseUrl}/instance/${instance}/qrcode`,
         `${baseUrl}/instance/${instance.toLowerCase()}/qrcode`,
