@@ -160,76 +160,113 @@ export class WhatsappService implements OnModuleInit {
     };
 
     try {
-      // 1. First, try fetchInstances to discover all instances on the Evolution API server
-      try {
-        const fetchRes = await axios.get(`${baseUrl}/instance/fetchInstances`, {
-          headers: this.getHeaders(),
-          timeout: 5000,
-        });
+      // 1. First, probe all instance collection endpoints to find the instance and its UUID
+      const listEndpoints = [
+        `${baseUrl}/instances`,
+        `${baseUrl}/instance`,
+        `${baseUrl}/instance/list`,
+        `${baseUrl}/instance/fetchInstances`,
+        `${baseUrl}/api/instances`,
+        `${baseUrl}/api/v1/instances`,
+      ];
 
-        debugInfo.responses['fetchInstances'] = fetchRes?.data;
+      let instanceList: any[] = [];
+      for (const endpoint of listEndpoints) {
+        try {
+          const fetchRes = await axios.get(endpoint, {
+            headers: this.getHeaders(),
+            timeout: 5000,
+          });
 
-        const instanceList = Array.isArray(fetchRes?.data)
-          ? fetchRes.data
-          : Array.isArray(fetchRes?.data?.instances)
-            ? fetchRes.data.instances
-            : [];
-
-        const matchingInst = instanceList.find((item: any) => {
-          const name =
-            item?.instanceName ||
-            item?.name ||
-            item?.instance?.instanceName ||
-            item?.instance?.name ||
-            '';
-          return name.toLowerCase() === instance.toLowerCase();
-        });
-
-        if (matchingInst) {
-          const instObj = matchingInst.instance || matchingInst;
-          const state =
-            instObj?.state ||
-            instObj?.status ||
-            instObj?.connectionStatus ||
-            instObj?.connection_status ||
-            '';
-
-          if (
-            state === 'open' ||
-            state === 'connected' ||
-            state === 'CONNECTED' ||
-            state === 'online'
-          ) {
-            const phone =
-              instObj?.ownerJid?.split('@')[0] ||
-              instObj?.owner?.split('@')[0] ||
-              instObj?.phone ||
-              instObj?.number;
-            return {
-              instanceName: instance,
-              status: 'CONNECTED',
-              phoneConnected: phone ? `+${phone}` : undefined,
-              isMock: false,
-            };
+          if (fetchRes?.data) {
+            debugInfo.responses[endpoint] = fetchRes.data;
+            const data = fetchRes.data;
+            if (Array.isArray(data)) {
+              instanceList = data;
+              break;
+            } else if (Array.isArray(data?.instances)) {
+              instanceList = data.instances;
+              break;
+            } else if (Array.isArray(data?.data)) {
+              instanceList = data.data;
+              break;
+            } else if (data?.id || data?.instanceId || data?.instanceName || data?.name) {
+              instanceList = [data];
+              break;
+            }
           }
+        } catch (err: any) {
+          debugInfo.responses[endpoint] = {
+            status: err?.response?.status,
+            data: err?.response?.data,
+          };
         }
-      } catch (err: any) {
-        debugInfo.responses['fetchInstances_error'] = {
-          message: err?.message,
-          status: err?.response?.status,
-          data: err?.response?.data,
-        };
       }
 
-      // 2. Try individual instance status endpoints in Evolution Go
-      const statusEndpoints = [
-        `${baseUrl}/instance/${instance}/status`,
-        `${baseUrl}/instance/${instance.toLowerCase()}/status`,
-        `${baseUrl}/instance/connectionState/${instance}`,
-        `${baseUrl}/instance/connectionState/${instance.toLowerCase()}`,
-        `${baseUrl}/instance/status/${instance}`,
-        `${baseUrl}/instance/info/${instance}`,
-      ];
+      // Find matching instance in list by name or ID
+      const matchingInst = instanceList.find((item: any) => {
+        const name =
+          item?.name ||
+          item?.instanceName ||
+          item?.instance?.name ||
+          item?.instance?.instanceName ||
+          item?.id ||
+          '';
+        return (
+          String(name).toLowerCase() === instance.toLowerCase() ||
+          String(item?.id).toLowerCase() === instance.toLowerCase()
+        );
+      }) || (instanceList.length === 1 ? instanceList[0] : null);
+
+      let resolvedInstanceId = instance;
+
+      if (matchingInst) {
+        const instObj = matchingInst.instance || matchingInst;
+        if (instObj?.id || instObj?.instanceId) {
+          resolvedInstanceId = instObj?.id || instObj?.instanceId;
+        }
+
+        const state =
+          instObj?.state ||
+          instObj?.status ||
+          instObj?.connectionStatus ||
+          instObj?.connection_status ||
+          '';
+
+        if (
+          state === 'open' ||
+          state === 'connected' ||
+          state === 'CONNECTED' ||
+          state === 'online'
+        ) {
+          const phone =
+            instObj?.ownerJid?.split('@')[0] ||
+            instObj?.owner?.split('@')[0] ||
+            instObj?.phone ||
+            instObj?.number ||
+            instObj?.phoneConnected;
+          return {
+            instanceName: instance,
+            status: 'CONNECTED',
+            phoneConnected: phone ? `+${phone}` : undefined,
+            isMock: false,
+            debug: debugInfo,
+          };
+        }
+      }
+
+      // 2. Try individual instance status endpoints in Evolution Go with name AND resolved UUID
+      const targetIds = Array.from(new Set([instance, resolvedInstanceId, instance.toLowerCase()]));
+      const statusEndpoints: string[] = [];
+      for (const tId of targetIds) {
+        statusEndpoints.push(
+          `${baseUrl}/instance/${tId}/status`,
+          `${baseUrl}/instance/connectionState/${tId}`,
+          `${baseUrl}/instance/status/${tId}`,
+          `${baseUrl}/instance/info/${tId}`,
+          `${baseUrl}/instance/${tId}`,
+        );
+      }
 
       let stateRes: any = null;
       for (const endpoint of statusEndpoints) {
