@@ -112,11 +112,12 @@ export class WhatsappService implements OnModuleInit {
     );
   }
 
-  private getHeaders() {
-    const apiKey = this.getApiKey();
+  private getHeaders(customToken?: string) {
+    const apiKey = customToken || this.getApiKey();
     return {
       apikey: apiKey,
       apiKey: apiKey,
+      token: apiKey,
       GLOBAL_API_KEY: apiKey,
       Authorization: `Bearer ${apiKey}`,
       'Content-Type': 'application/json',
@@ -316,11 +317,14 @@ export class WhatsappService implements OnModuleInit {
 
       // 3. Try different QR code routes in Evolution Go
       const qrEndpoints = [
-        `${baseUrl}/instance/${instance}/qrcode`,
-        `${baseUrl}/instance/${instance.toLowerCase()}/qrcode`,
-        `${baseUrl}/instance/connect/${instance}`,
-        `${baseUrl}/instance/connect/${instance.toLowerCase()}`,
+        `${baseUrl}/instance/qr/${instance}`,
         `${baseUrl}/instance/qrcode/${instance}`,
+        `${baseUrl}/instance/${instance}/qr`,
+        `${baseUrl}/instance/${instance}/qrcode`,
+        `${baseUrl}/instance/connect/${instance}`,
+        `${baseUrl}/instance/${instance}/connect`,
+        `${baseUrl}/instance/${instance.toLowerCase()}/qrcode`,
+        `${baseUrl}/instance/connect/${instance.toLowerCase()}`,
       ];
 
       let connectRes: any = null;
@@ -343,22 +347,29 @@ export class WhatsappService implements OnModuleInit {
         }
       }
 
-      // If GET failed, try POST /instance/connect
+      // If GET failed, try POST /instance/connect or /instance/:id/connect
       if (!connectRes) {
-        try {
-          connectRes = await axios.post(
-            `${baseUrl}/instance/connect/${instance}`,
-            {},
-            { headers: this.getHeaders(), timeout: 5000 },
-          );
-          if (connectRes?.data) {
-            debugInfo.responses[`POST_${baseUrl}/instance/connect/${instance}`] = connectRes.data;
+        const connectPostEndpoints = [
+          `${baseUrl}/instance/connect/${instance}`,
+          `${baseUrl}/instance/${instance}/connect`,
+        ];
+        for (const postUrl of connectPostEndpoints) {
+          try {
+            connectRes = await axios.post(
+              postUrl,
+              {},
+              { headers: this.getHeaders(), timeout: 5000 },
+            );
+            if (connectRes?.data) {
+              debugInfo.responses[`POST_${postUrl}`] = connectRes.data;
+              break;
+            }
+          } catch (err: any) {
+            debugInfo.responses[`POST_${postUrl}`] = {
+              status: err?.response?.status,
+              data: err?.response?.data,
+            };
           }
-        } catch (err: any) {
-          debugInfo.responses[`POST_${baseUrl}/instance/connect/${instance}`] = {
-            status: err?.response?.status,
-            data: err?.response?.data,
-          };
         }
       }
 
@@ -366,6 +377,7 @@ export class WhatsappService implements OnModuleInit {
         connectRes?.data?.base64 ||
         connectRes?.data?.qrcode?.base64 ||
         connectRes?.data?.qrcode ||
+        connectRes?.data?.qr ||
         connectRes?.data?.code ||
         connectRes?.data?.pairingCode;
 
@@ -379,6 +391,7 @@ export class WhatsappService implements OnModuleInit {
           createRes?.qrcode?.base64 ||
           createRes?.base64 ||
           createRes?.qrcode ||
+          createRes?.qr ||
           createRes?.hash?.qrcode?.base64;
       }
 
@@ -418,25 +431,28 @@ export class WhatsappService implements OnModuleInit {
     const baseUrl = this.getBaseUrl();
     if (!baseUrl) return null;
 
-    try {
-      const res = await axios.post(
-        `${baseUrl}/instance/create`,
-        {
-          instanceName,
-          integration: 'WHATSAPP_BAILEYS',
-          qrcode: true,
-        },
-        {
+    const createEndpoints = [
+      { url: `${baseUrl}/instance/create`, body: { instanceName, name: instanceName, integration: 'WHATSAPP_BAILEYS', qrcode: true } },
+      { url: `${baseUrl}/instance`, body: { name: instanceName } },
+      { url: `${baseUrl}/instances`, body: { name: instanceName } },
+      { url: `${baseUrl}/instance/init`, body: { name: instanceName } },
+    ];
+
+    for (const ep of createEndpoints) {
+      try {
+        const res = await axios.post(ep.url, ep.body, {
           headers: this.getHeaders(),
           timeout: 10000,
-        },
-      );
-      this.logger.log(`Instance ${instanceName} created successfully in Evolution Go.`);
-      return res.data;
-    } catch (error: any) {
-      this.logger.warn(`Could not create instance ${instanceName}: ${error?.message}`);
-      return null;
+        });
+        if (res?.data) {
+          this.logger.log(`Instance ${instanceName} created successfully via ${ep.url}`);
+          return res.data;
+        }
+      } catch (error: any) {
+        // try next
+      }
     }
+    return null;
   }
 
   /**
