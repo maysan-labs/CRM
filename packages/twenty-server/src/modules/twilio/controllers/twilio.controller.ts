@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Header, HttpCode, Post, Query, Req, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Header, HttpCode, Post, Query, UseGuards } from '@nestjs/common';
 
 import { PublicEndpointGuard } from 'src/engine/guards/public-endpoint.guard';
 import { NoPermissionGuard } from 'src/engine/guards/no-permission.guard';
@@ -21,18 +21,30 @@ export class TwilioController {
   }
 
   /**
-   * Public TwiML Webhook called by Twilio when an outbound or inbound call connects.
+   * Public TwiML Webhook called by Twilio when an outbound or inbound call connects (POST).
    * Returns XML TwiML response.
    */
   @Post('voice')
   @UseGuards(PublicEndpointGuard, NoPermissionGuard)
   @HttpCode(200)
   @Header('Content-Type', 'text/xml')
-  handleVoiceWebhook(@Body() body: any, @Query('To') queryTo?: string) {
+  handleVoiceWebhookPost(@Body() body: any, @Query('To') queryTo?: string) {
     const destinationTo = body?.To || queryTo;
     const callerFrom = body?.From;
 
     return this.twilioService.generateTwiMLResponse(destinationTo, callerFrom);
+  }
+
+  /**
+   * Public TwiML Webhook called by Twilio when an outbound or inbound call connects (GET).
+   * Returns XML TwiML response.
+   */
+  @Get('voice')
+  @UseGuards(PublicEndpointGuard, NoPermissionGuard)
+  @HttpCode(200)
+  @Header('Content-Type', 'text/xml')
+  handleVoiceWebhookGet(@Query('To') queryTo?: string, @Query('From') queryFrom?: string) {
+    return this.twilioService.generateTwiMLResponse(queryTo, queryFrom);
   }
 
   /**

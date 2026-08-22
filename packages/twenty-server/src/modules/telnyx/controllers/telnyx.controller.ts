@@ -20,18 +20,30 @@ export class TelnyxController {
   }
 
   /**
-   * Public TeXML Webhook called by Telnyx when an outbound or inbound call connects.
+   * Public TeXML Webhook called by Telnyx when an outbound or inbound call connects (POST).
    * Returns XML TeXML response (compatible with TwiML).
    */
   @Post('voice')
   @UseGuards(PublicEndpointGuard, NoPermissionGuard)
   @HttpCode(200)
   @Header('Content-Type', 'text/xml')
-  handleVoiceWebhook(@Body() body: any, @Query('To') queryTo?: string) {
+  handleVoiceWebhookPost(@Body() body: any, @Query('To') queryTo?: string) {
     const destinationTo = body?.To || queryTo;
     const callerFrom = body?.From;
 
     return this.telnyxService.generateTeXMLResponse(destinationTo, callerFrom);
+  }
+
+  /**
+   * Public TeXML Webhook called by Telnyx when an outbound or inbound call connects (GET).
+   * Returns XML TeXML response (compatible with TwiML).
+   */
+  @Get('voice')
+  @UseGuards(PublicEndpointGuard, NoPermissionGuard)
+  @HttpCode(200)
+  @Header('Content-Type', 'text/xml')
+  handleVoiceWebhookGet(@Query('To') queryTo?: string, @Query('From') queryFrom?: string) {
+    return this.telnyxService.generateTeXMLResponse(queryTo, queryFrom);
   }
 
   /**

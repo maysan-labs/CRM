@@ -7,7 +7,7 @@ const StyledContainer = styled.div`
   position: fixed;
   bottom: 20px;
   right: 20px;
-  width: 330px;
+  width: 340px;
   background: #1e1f23;
   border: 1px solid #33353d;
   border-radius: 12px;
@@ -85,6 +85,7 @@ const StyledTimer = styled.div`
   font-size: 14px;
   color: #a1a5b7;
   margin-bottom: 14px;
+  text-align: center;
 `;
 
 const StyledErrorBanner = styled.div`
@@ -98,6 +99,7 @@ const StyledErrorBanner = styled.div`
   font-size: 12px;
   line-height: 1.4;
   text-align: center;
+  word-break: break-word;
 `;
 
 const StyledKeypadGrid = styled.div`
@@ -226,14 +228,21 @@ export const TwilioSoftphoneDrawer: React.FC = () => {
   }
 
   const handleKeyClick = (char: string) => {
-    setInputNumber((prev: string) => prev + char);
+    if (char === '⌫') {
+      setInputNumber((prev: string) => prev.slice(0, -1));
+    } else {
+      setInputNumber((prev: string) => prev + char);
+    }
   };
 
   const handleDialClick = () => {
     if (callState === 'CONNECTED' || callState === 'DIALING') {
       hangUp();
     } else {
-      const target = inputNumber || phoneNumber || '+1234567890';
+      const target = inputNumber || phoneNumber || '';
+      if (!target.trim()) {
+        return;
+      }
       dial(target, contactName);
     }
   };
@@ -262,7 +271,7 @@ export const TwilioSoftphoneDrawer: React.FC = () => {
   const getStatusLabel = () => {
     switch (callState) {
       case 'DIALING':
-        return 'Ringing...';
+        return 'Calling...';
       case 'CONNECTED':
         return 'Connected';
       case 'BUSY':
@@ -313,7 +322,7 @@ export const TwilioSoftphoneDrawer: React.FC = () => {
         <StyledPhoneNumberInput
           value={callState !== 'IDLE' ? phoneNumber : inputNumber}
           onChange={(e) => setInputNumber(e.target.value)}
-          placeholder="+1 (555) 000-0000"
+          placeholder="+91 98765 43210"
           disabled={callState !== 'IDLE'}
         />
 
@@ -327,12 +336,12 @@ export const TwilioSoftphoneDrawer: React.FC = () => {
 
         {callState === 'BUSY' && (
           <StyledErrorBanner style={{ borderColor: '#f97316', color: '#fdba74' }}>
-            ⚠️ Line is currently busy (Busy)
+            ⚠️ Line is currently busy
           </StyledErrorBanner>
         )}
 
         {callState === 'CANCELLED' && (
-          <StyledTimer style={{ color: '#9ca3af' }}>⏹️ Call cancelled before pickup</StyledTimer>
+          <StyledTimer style={{ color: '#9ca3af' }}>⏹️ Call cancelled</StyledTimer>
         )}
 
         {callState === 'COMPLETED' && (
@@ -345,13 +354,13 @@ export const TwilioSoftphoneDrawer: React.FC = () => {
 
         {callState === 'FAILED' && (
           <StyledErrorBanner>
-            ⚠️ Call Failed: {lastErrorMessage || 'Check number format or permissions'}
+            ⚠️ {lastErrorMessage || 'Check number format or carrier permissions'}
           </StyledErrorBanner>
         )}
 
         {callState === 'IDLE' && (
           <StyledKeypadGrid>
-            {['1', '2', '3', '4', '5', '6', '7', '8', '9', '*', '0', '#'].map((key) => (
+            {['1', '2', '3', '4', '5', '6', '7', '8', '9', '+', '0', '⌫'].map((key) => (
               <StyledKeypadButton key={key} onClick={() => handleKeyClick(key)}>
                 {key}
               </StyledKeypadButton>

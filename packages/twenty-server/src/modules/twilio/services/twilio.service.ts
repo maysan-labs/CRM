@@ -90,21 +90,45 @@ export class TwilioService {
    * Generates TwiML XML instructions for handling outbound/inbound calls.
    */
   generateTwiMLResponse(to?: string, from?: string): string {
-    const callerId = process.env.TWILIO_PHONE_NUMBER || from || '';
-    const serverUrl = process.env.SERVER_URL || 'https://crm.maysanlabs.com';
+    let callerId = process.env.TWILIO_PHONE_NUMBER?.trim() || '';
+    if (!callerId && from && !from.startsWith('client:') && /^\+?[0-9]+$/.test(from)) {
+      callerId = from;
+    }
+
+    let serverUrl = process.env.SERVER_URL || process.env.FRONT_BASE_URL || 'https://crm.maysanlabs.com';
+    if (serverUrl.endsWith('/')) {
+      serverUrl = serverUrl.slice(0, -1);
+    }
     const callbackUrl = `${serverUrl}/telephony/twilio/recording-status`;
 
     if (!to) {
+      this.logger.warn('Twilio Voice Webhook received without destination number.');
       return `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
     <Say>No destination number was provided.</Say>
 </Response>`;
     }
 
+    // Clean destination number to E.164
+    let cleanTo = to.trim().replace(/[\s\-\(\)\.]/g, '');
+    if (!cleanTo.startsWith('+') && /^\d+$/.test(cleanTo)) {
+      cleanTo = `+${cleanTo}`;
+    }
+
+    this.logger.log(`Handling Twilio Outbound Call to: ${cleanTo} | CallerId: ${callerId || 'NONE'}`);
+
+    if (!callerId) {
+      this.logger.warn(
+        'TWILIO_PHONE_NUMBER is not set in backend environment. Twilio outbound PSTN calls require a verified Twilio callerId.',
+      );
+    }
+
+    const callerIdAttr = callerId ? ` callerId="${callerId}"` : '';
+
     return `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
-    <Dial callerId="${callerId}" record="record-from-answer" recordingStatusCallback="${callbackUrl}">
-        <Number>${to}</Number>
+    <Dial${callerIdAttr} record="record-from-answer" recordingStatusCallback="${callbackUrl}">
+        <Number>${cleanTo}</Number>
     </Dial>
 </Response>`;
   }

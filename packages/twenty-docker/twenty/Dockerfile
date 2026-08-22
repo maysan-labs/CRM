@@ -51,7 +51,7 @@ RUN npx nx run twenty-shared:build && \
     (cd packages/twenty-server && npx lingui compile --typescript --workers 1) && \
     (cd packages/twenty-emails && npx lingui compile --typescript --workers 1) && \
     npx nx run twenty-emails:build && \
-    (cd packages/twenty-server && npx rimraf --glob dist && npx nest build --path ./tsconfig.build.json && node -e "const fs = require('fs'); fs.mkdirSync('dist/assets/twenty-client-sdk', {recursive: true}); fs.copyFileSync('../twenty-client-sdk/package.json', 'dist/assets/twenty-client-sdk/package.json'); fs.cpSync('../twenty-client-sdk/dist', 'dist/assets/twenty-client-sdk/dist', {recursive: true});")
+    (cd packages/twenty-server && rm -rf dist && npx nest build --path ./tsconfig.build.json && node -e "const fs = require('fs'); fs.mkdirSync('dist/assets/twenty-client-sdk', {recursive: true}); fs.copyFileSync('../twenty-client-sdk/package.json', 'dist/assets/twenty-client-sdk/package.json'); fs.cpSync('../twenty-client-sdk/dist', 'dist/assets/twenty-client-sdk/dist', {recursive: true});")
 
 # Clean server build output (type declarations and compiled tests are not needed at runtime;
 # source maps are kept because twenty-infra extracts them from the image for Sentry uploads)

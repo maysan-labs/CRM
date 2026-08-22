@@ -114,11 +114,14 @@ export class TelnyxService {
    * Generates TeXML (XML) instructions for handling outbound/inbound calls.
    */
   generateTeXMLResponse(to?: string, from?: string): string {
-    const callerId =
-      process.env.TELNYX_PHONE_NUMBER ||
-      process.env.TWILIO_PHONE_NUMBER ||
-      from ||
+    let callerId =
+      process.env.TELNYX_PHONE_NUMBER?.trim() ||
+      process.env.TWILIO_PHONE_NUMBER?.trim() ||
       '';
+    if (!callerId && from && !from.startsWith('client:') && /^\+?[0-9]+$/.test(from)) {
+      callerId = from;
+    }
+
     let serverUrl = process.env.SERVER_URL || process.env.FRONT_BASE_URL || '';
     if (serverUrl.endsWith('/')) {
       serverUrl = serverUrl.slice(0, -1);
@@ -128,16 +131,27 @@ export class TelnyxService {
       : '/telephony/telnyx/recording-status';
 
     if (!to) {
+      this.logger.warn('Telnyx Voice Webhook received without a "To" destination number.');
       return `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
     <Say>No destination number was provided.</Say>
 </Response>`;
     }
 
+    // Clean destination number to E.164
+    let cleanTo = to.trim().replace(/[\s\-\(\)\.]/g, '');
+    if (!cleanTo.startsWith('+') && /^\d+$/.test(cleanTo)) {
+      cleanTo = `+${cleanTo}`;
+    }
+
+    this.logger.log(`Handling Telnyx Outbound Call to: ${cleanTo} | CallerId: ${callerId || 'NONE'}`);
+
+    const callerIdAttr = callerId ? ` callerId="${callerId}"` : '';
+
     return `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
-    <Dial callerId="${callerId}" record="record-from-answer" recordingStatusCallback="${callbackUrl}">
-        <Number>${to}</Number>
+    <Dial${callerIdAttr} record="record-from-answer" recordingStatusCallback="${callbackUrl}">
+        <Number>${cleanTo}</Number>
     </Dial>
 </Response>`;
   }
