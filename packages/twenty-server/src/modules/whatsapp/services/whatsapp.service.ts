@@ -104,6 +104,14 @@ export class WhatsappService implements OnModuleInit {
     );
   }
 
+  private getInstanceToken(): string {
+    return (
+      process.env.EVOLUTION_GO_INSTANCE_TOKEN?.trim() ||
+      process.env.INSTANCE_TOKEN?.trim() ||
+      ''
+    );
+  }
+
   private getDefaultInstance(): string {
     return (
       process.env.EVOLUTION_GO_INSTANCE_NAME?.trim() ||
@@ -113,15 +121,30 @@ export class WhatsappService implements OnModuleInit {
   }
 
   private getHeaders(customToken?: string) {
-    const apiKey = customToken || this.getApiKey();
-    return {
-      apikey: apiKey,
-      apiKey: apiKey,
-      token: apiKey,
-      GLOBAL_API_KEY: apiKey,
-      Authorization: `Bearer ${apiKey}`,
+    const apiKey = this.getApiKey();
+    const instanceToken = customToken || this.getInstanceToken();
+
+    const headers: Record<string, string> = {
       'Content-Type': 'application/json',
     };
+
+    if (apiKey) {
+      headers['apikey'] = apiKey;
+      headers['apiKey'] = apiKey;
+      headers['GLOBAL_API_KEY'] = apiKey;
+      headers['Authorization'] = `Bearer ${apiKey}`;
+    }
+
+    if (instanceToken) {
+      headers['token'] = instanceToken;
+      headers['instance_token'] = instanceToken;
+      headers['instanceToken'] = instanceToken;
+      headers['instance-token'] = instanceToken;
+    } else if (apiKey) {
+      headers['token'] = apiKey;
+    }
+
+    return headers;
   }
 
   /**
@@ -163,12 +186,21 @@ export class WhatsappService implements OnModuleInit {
     try {
       // 1. First, probe all instance collection endpoints to find the instance and its UUID
       const listEndpoints = [
+        `${baseUrl}/instance/all`,
+        `${baseUrl}/instances/all`,
+        `${baseUrl}/instances/list`,
         `${baseUrl}/instances`,
         `${baseUrl}/instance`,
         `${baseUrl}/instance/list`,
         `${baseUrl}/instance/fetchInstances`,
         `${baseUrl}/api/instances`,
         `${baseUrl}/api/v1/instances`,
+        `${baseUrl}/api/instance`,
+        `${baseUrl}/app/devices`,
+        `${baseUrl}/devices`,
+        `${baseUrl}/sessions`,
+        `${baseUrl}/session`,
+        `${baseUrl}/user/info`,
       ];
 
       let instanceList: any[] = [];
@@ -256,8 +288,9 @@ export class WhatsappService implements OnModuleInit {
         }
       }
 
-      // 2. Try individual instance status endpoints in Evolution Go with name AND resolved UUID
-      const targetIds = Array.from(new Set([instance, resolvedInstanceId, instance.toLowerCase()]));
+      // 2. Try individual instance status endpoints in Evolution Go with name AND resolved UUID and instance token
+      const instanceToken = this.getInstanceToken();
+      const targetIds = Array.from(new Set([instance, instanceToken, resolvedInstanceId, instance.toLowerCase()].filter(Boolean)));
       const statusEndpoints: string[] = [];
       for (const tId of targetIds) {
         statusEndpoints.push(

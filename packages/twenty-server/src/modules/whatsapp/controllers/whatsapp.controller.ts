@@ -64,6 +64,20 @@ export class WhatsappController {
   }
 
   /**
+   * Health check / confirmation endpoint for webhook URL in browsers.
+   * Access: GET /whatsapp/webhook
+   */
+  @Get('webhook')
+  @UseGuards(PublicEndpointGuard, NoPermissionGuard)
+  async getWebhookHealth() {
+    return {
+      status: 'ok',
+      message: 'WhatsApp webhook endpoint is active and listening for POST events.',
+      timestamp: new Date().toISOString(),
+    };
+  }
+
+  /**
    * Public Webhook receiver for Evolution Go events.
    * Evolution Go posts events here (MESSAGES_UPSERT, CONNECTION_UPDATE, etc.).
    * Access: POST /whatsapp/webhook
