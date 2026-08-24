@@ -259,29 +259,33 @@ export class WhatsappService implements OnModuleInit {
           resolvedInstanceId = instObj?.id || instObj?.instanceId;
         }
 
-        const state =
-          instObj?.state ||
-          instObj?.status ||
-          instObj?.connectionStatus ||
-          instObj?.connection_status ||
-          '';
+        const isConnected =
+          instObj?.connected === true ||
+          instObj?.state === 'open' ||
+          instObj?.state === 'connected' ||
+          instObj?.state === 'CONNECTED' ||
+          instObj?.state === 'online' ||
+          instObj?.status === 'connected' ||
+          instObj?.status === 'CONNECTED' ||
+          instObj?.connectionStatus === 'open' ||
+          instObj?.connectionStatus === 'connected';
 
-        if (
-          state === 'open' ||
-          state === 'connected' ||
-          state === 'CONNECTED' ||
-          state === 'online'
-        ) {
-          const phone =
-            instObj?.ownerJid?.split('@')[0] ||
-            instObj?.owner?.split('@')[0] ||
+        if (isConnected) {
+          const rawJid =
+            instObj?.jid ||
+            instObj?.ownerJid ||
+            instObj?.owner ||
             instObj?.phone ||
             instObj?.number ||
             instObj?.phoneConnected;
+          let phone = rawJid ? String(rawJid).split('@')[0].split(':')[0] : undefined;
+          if (phone && !phone.startsWith('+')) {
+            phone = `+${phone}`;
+          }
           return {
             instanceName: instance,
             status: 'CONNECTED',
-            phoneConnected: phone ? `+${phone}` : undefined,
+            phoneConnected: phone,
             isMock: false,
             debug: debugInfo,
           };
@@ -322,29 +326,35 @@ export class WhatsappService implements OnModuleInit {
         }
       }
 
-      const connectionState =
-        stateRes?.data?.instance?.state ||
-        stateRes?.data?.state ||
-        stateRes?.data?.status ||
-        stateRes?.data?.connectionStatus ||
-        stateRes?.data?.connection_status;
+      const resData = stateRes?.data?.data || stateRes?.data?.instance || stateRes?.data;
+      const isStateConnected =
+        resData?.connected === true ||
+        resData?.state === 'open' ||
+        resData?.state === 'connected' ||
+        resData?.state === 'CONNECTED' ||
+        resData?.state === 'online' ||
+        resData?.status === 'connected' ||
+        resData?.status === 'CONNECTED' ||
+        resData?.connectionStatus === 'open' ||
+        resData?.connectionStatus === 'connected';
 
-      if (
-        connectionState === 'open' ||
-        connectionState === 'connected' ||
-        connectionState === 'CONNECTED' ||
-        connectionState === 'online'
-      ) {
-        const phone =
-          stateRes?.data?.instance?.ownerJid?.split('@')[0] ||
-          stateRes?.data?.owner?.split('@')[0] ||
-          stateRes?.data?.phone ||
-          stateRes?.data?.number;
+      if (isStateConnected) {
+        const rawJid =
+          resData?.jid ||
+          resData?.ownerJid ||
+          resData?.owner ||
+          resData?.phone ||
+          resData?.number;
+        let phone = rawJid ? String(rawJid).split('@')[0].split(':')[0] : undefined;
+        if (phone && !phone.startsWith('+')) {
+          phone = `+${phone}`;
+        }
         return {
           instanceName: instance,
           status: 'CONNECTED',
-          phoneConnected: phone ? `+${phone}` : undefined,
+          phoneConnected: phone,
           isMock: false,
+          debug: debugInfo,
         };
       }
 
@@ -515,6 +525,7 @@ export class WhatsappService implements OnModuleInit {
       };
     }
 
+    const instanceToken = this.getInstanceToken();
     // Try all valid Evolution Go / Evolution API sendText endpoint patterns
     const sendAttempts = [
       {
@@ -529,17 +540,25 @@ export class WhatsappService implements OnModuleInit {
         url: `${baseUrl}/message/sendText/${instance}`,
         body: { number: cleanNumber, text: dto.text, delay: 1200, linkPreview: true },
       },
-      {
-        url: `${baseUrl}/send/text/${instance}`,
-        body: { number: cleanNumber, text: dto.text },
-      },
-      {
-        url: `${baseUrl}/message/sendText/${instance.toLowerCase()}`,
-        body: { number: cleanNumber, text: dto.text, delay: 1200, linkPreview: true },
-      },
+      ...(instanceToken
+        ? [
+            {
+              url: `${baseUrl}/message/sendText/${instanceToken}`,
+              body: { number: cleanNumber, text: dto.text, delay: 1200, linkPreview: true },
+            },
+          ]
+        : []),
       {
         url: `${baseUrl}/message/sendText`,
         body: { instance, number: cleanNumber, text: dto.text },
+      },
+      {
+        url: `${baseUrl}/message/send/text`,
+        body: { number: cleanNumber, text: dto.text },
+      },
+      {
+        url: `${baseUrl}/send/text/${instance}`,
+        body: { number: cleanNumber, text: dto.text },
       },
     ];
 
