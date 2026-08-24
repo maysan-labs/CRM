@@ -526,39 +526,72 @@ export class WhatsappService implements OnModuleInit {
     }
 
     const instanceToken = this.getInstanceToken();
+    const headers = this.getHeaders();
+    const tokenHeaders = {
+      ...headers,
+      ...(instanceToken ? { apikey: instanceToken, token: instanceToken } : {}),
+    };
+
     // Try all valid Evolution Go / Evolution API sendText endpoint patterns
     const sendAttempts = [
       {
-        url: `${baseUrl}/send/text`,
-        body: { instance, number: cleanNumber, text: dto.text },
-      },
-      {
-        url: `${baseUrl}/send/text`,
-        body: { number: cleanNumber, text: dto.text },
-      },
-      {
         url: `${baseUrl}/message/sendText/${instance}`,
         body: { number: cleanNumber, text: dto.text, delay: 1200, linkPreview: true },
+        headers,
       },
       ...(instanceToken
         ? [
             {
               url: `${baseUrl}/message/sendText/${instanceToken}`,
               body: { number: cleanNumber, text: dto.text, delay: 1200, linkPreview: true },
+              headers,
+            },
+            {
+              url: `${baseUrl}/message/sendText/${instanceToken}`,
+              body: { number: cleanNumber, text: dto.text, delay: 1200, linkPreview: true },
+              headers: tokenHeaders,
+            },
+            {
+              url: `${baseUrl}/send/text?token=${instanceToken}`,
+              body: { number: cleanNumber, text: dto.text },
+              headers: tokenHeaders,
+            },
+            {
+              url: `${baseUrl}/send/text`,
+              body: { token: instanceToken, number: cleanNumber, text: dto.text },
+              headers: tokenHeaders,
             },
           ]
         : []),
       {
-        url: `${baseUrl}/message/sendText`,
-        body: { instance, number: cleanNumber, text: dto.text },
+        url: `${baseUrl}/message/sendText/${instance}`,
+        body: { number: cleanNumber, textMessage: { text: dto.text } },
+        headers,
       },
       {
-        url: `${baseUrl}/message/send/text`,
-        body: { number: cleanNumber, text: dto.text },
+        url: `${baseUrl}/message/sendText`,
+        body: { instance, number: cleanNumber, text: dto.text },
+        headers,
+      },
+      {
+        url: `${baseUrl}/send/text`,
+        body: { instance, number: cleanNumber, text: dto.text },
+        headers,
       },
       {
         url: `${baseUrl}/send/text/${instance}`,
         body: { number: cleanNumber, text: dto.text },
+        headers,
+      },
+      {
+        url: `${baseUrl}/message/send/text`,
+        body: { number: cleanNumber, text: dto.text },
+        headers,
+      },
+      {
+        url: `${baseUrl}/send/message`,
+        body: { phone: cleanNumber, message: dto.text },
+        headers,
       },
     ];
 
@@ -567,7 +600,7 @@ export class WhatsappService implements OnModuleInit {
     for (const attempt of sendAttempts) {
       try {
         const res = await axios.post(attempt.url, attempt.body, {
-          headers: this.getHeaders(),
+          headers: attempt.headers || headers,
           timeout: 12000,
         });
 
@@ -576,6 +609,7 @@ export class WhatsappService implements OnModuleInit {
             res.data?.key?.id ||
             res.data?.messageId ||
             res.data?.id ||
+            res.data?.data?.id ||
             `msg_${Date.now()}`;
 
           this.logger.log(
@@ -590,13 +624,8 @@ export class WhatsappService implements OnModuleInit {
         }
       } catch (err: any) {
         lastError = err;
-        // if 404 or method not allowed, continue to next candidate route
-        if (err.response?.status === 404 || err.response?.status === 405) {
-          continue;
-        } else {
-          // If auth or bad request error, break early
-          break;
-        }
+        // Continue to next candidate endpoint
+        continue;
       }
     }
 
