@@ -548,38 +548,24 @@ export class WhatsappService implements OnModuleInit {
 
     const sendAttempts: Array<{ url: string; body: any; headers?: any }> = [];
 
-    for (const target of targetIds) {
-      sendAttempts.push(
-        {
-          url: `${baseUrl}/message/sendText/${target}`,
-          body: { number: cleanNumber, text: dto.text, delay: 1200, linkPreview: true },
-          headers,
-        },
-        {
-          url: `${baseUrl}/message/sendText/${target}`,
-          body: { number: cleanNumber, text: dto.text, delay: 1200, linkPreview: true },
-          headers: tokenHeaders,
-        },
-        {
-          url: `${baseUrl}/message/sendText/${target}`,
-          body: { number: cleanNumber, textMessage: { text: dto.text } },
-          headers: tokenHeaders,
-        },
-        {
-          url: `${baseUrl}/message/sendText/${target}`,
-          body: { jid: `${cleanNumber}@s.whatsapp.net`, message: dto.text },
-          headers: tokenHeaders,
-        },
-        {
-          url: `${baseUrl}/instance/${target}/send/text`,
-          body: { number: cleanNumber, text: dto.text },
-          headers: tokenHeaders,
-        },
-      );
-    }
-
+    // 1. Direct Go message/sendText routes with query token and body token
     if (instanceToken) {
       sendAttempts.push(
+        {
+          url: `${baseUrl}/message/sendText?token=${instanceToken}`,
+          body: { number: cleanNumber, text: dto.text, delay: 1200, linkPreview: true },
+          headers: tokenHeaders,
+        },
+        {
+          url: `${baseUrl}/message/sendText`,
+          body: { token: instanceToken, number: cleanNumber, text: dto.text },
+          headers: tokenHeaders,
+        },
+        {
+          url: `${baseUrl}/message/sendText`,
+          body: { token: instanceToken, jid: `${cleanNumber}@s.whatsapp.net`, message: dto.text },
+          headers: tokenHeaders,
+        },
         {
           url: `${baseUrl}/send/text?token=${instanceToken}`,
           body: { number: cleanNumber, text: dto.text },
@@ -591,37 +577,70 @@ export class WhatsappService implements OnModuleInit {
           headers: tokenHeaders,
         },
         {
-          url: `${baseUrl}/send/text`,
+          url: `${baseUrl}/send/message`,
           body: { token: instanceToken, phone: cleanNumber, message: dto.text },
           headers: tokenHeaders,
         },
         {
-          url: `${baseUrl}/message/send`,
+          url: `${baseUrl}/message/send/text`,
           body: { token: instanceToken, number: cleanNumber, text: dto.text },
           headers: tokenHeaders,
         },
       );
     }
 
+    // 2. Target ID specific routes
+    for (const target of targetIds) {
+      sendAttempts.push(
+        {
+          url: `${baseUrl}/message/sendText/${target}`,
+          body: { number: cleanNumber, text: dto.text, delay: 1200, linkPreview: true },
+          headers: tokenHeaders,
+        },
+        {
+          url: `${baseUrl}/message/sendText/${target}`,
+          body: { number: cleanNumber, textMessage: { text: dto.text } },
+          headers: tokenHeaders,
+        },
+        {
+          url: `${baseUrl}/instance/${target}/send/text`,
+          body: { number: cleanNumber, text: dto.text },
+          headers: tokenHeaders,
+        },
+        {
+          url: `${baseUrl}/instance/${target}/send/text?token=${instanceToken}`,
+          body: { number: cleanNumber, text: dto.text },
+          headers: tokenHeaders,
+        },
+      );
+    }
+
+    // 3. Fallback generic routes
     sendAttempts.push(
       {
         url: `${baseUrl}/message/sendText`,
         body: { instance, number: cleanNumber, text: dto.text },
-        headers,
+        headers: tokenHeaders,
       },
       {
         url: `${baseUrl}/send/text`,
         body: { instance, number: cleanNumber, text: dto.text },
-        headers,
+        headers: tokenHeaders,
       },
       {
-        url: `${baseUrl}/send/message`,
-        body: { phone: cleanNumber, message: dto.text },
-        headers,
+        url: `${baseUrl}/message/send`,
+        body: { number: cleanNumber, text: dto.text },
+        headers: tokenHeaders,
+      },
+      {
+        url: `${baseUrl}/message/send/text`,
+        body: { number: cleanNumber, text: dto.text },
+        headers: tokenHeaders,
       },
     );
 
     let lastError: any = null;
+    const attemptedLog: string[] = [];
 
     for (const attempt of sendAttempts) {
       try {
@@ -650,6 +669,7 @@ export class WhatsappService implements OnModuleInit {
         }
       } catch (err: any) {
         lastError = err;
+        attemptedLog.push(`${attempt.url} [${err?.response?.status || err?.message}]`);
         this.logger.warn(
           `WhatsApp send attempt to ${attempt.url} failed: ${err.message} (${err.response?.status}) - Data: ${JSON.stringify(err.response?.data)}`,
         );
@@ -660,14 +680,15 @@ export class WhatsappService implements OnModuleInit {
     const errMsg =
       lastError?.response?.data?.response?.message ||
       lastError?.response?.data?.message ||
+      lastError?.response?.data?.error ||
       lastError?.message ||
       'Failed to send WhatsApp message';
 
-    this.logger.error(`Failed to send WhatsApp message to ${cleanNumber}: ${errMsg}`);
+    this.logger.error(`Failed to send WhatsApp message to ${cleanNumber}: ${errMsg} (Tried: ${attemptedLog.join(', ')})`);
 
     return {
       success: false,
-      error: errMsg,
+      error: `${errMsg} (Tested: ${attemptedLog.slice(0, 3).join(', ')})`,
     };
   }
 
